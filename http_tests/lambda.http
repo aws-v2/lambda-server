@@ -1,0 +1,274 @@
+### Register Go Function
+POST http://localhost:8083/functions
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="name"
+
+hello-go
+--boundary
+Content-Disposition: form-data; name="type"
+
+lambda
+--boundary
+Content-Disposition: form-data; name="image"
+
+golang:1.22-alpine
+--boundary
+Content-Disposition: form-data; name="execution.kind"
+
+binary
+--boundary
+Content-Disposition: form-data; name="resources.cpu"
+
+1
+--boundary
+Content-Disposition: form-data; name="resources.memory"
+
+128
+--boundary
+Content-Disposition: form-data; name="file"; filename="handler"
+Content-Type: application/octet-stream
+
+< ./handler
+--boundary--
+
+### Invoke Go Function
+POST http://localhost:8083/invoke
+Content-Type: application/json
+
+{
+  "name": "hello-go",
+  "payload": {
+    "name": "World"
+  }
+}
+
+### Register Node.js Function
+POST http://localhost:8083/functions
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="name"
+
+hello-node
+--boundary
+Content-Disposition: form-data; name="type"
+
+lambda
+--boundary
+Content-Disposition: form-data; name="image"
+
+node:18-alpine
+--boundary
+Content-Disposition: form-data; name="execution.kind"
+
+node
+--boundary
+Content-Disposition: form-data; name="resources.cpu"
+
+1
+--boundary
+Content-Disposition: form-data; name="resources.memory"
+
+128
+--boundary
+Content-Disposition: form-data; name="file"; filename="app.js"
+Content-Type: application/javascript
+
+< ./app.js
+--boundary--
+
+### Invoke Node.js Function
+POST http://localhost:8083/invoke
+Content-Type: application/json
+
+{
+    "name": "hello-node",
+    "payload": {
+        "message": "Hello from Node"
+    }
+}
+
+### Register Python Function
+POST http://localhost:8083/functions
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="name"
+
+hello-python
+--boundary
+Content-Disposition: form-data; name="type"
+
+lambda
+--boundary
+Content-Disposition: form-data; name="image"
+
+python:3.10-slim
+--boundary
+Content-Disposition: form-data; name="execution.kind"
+
+python
+--boundary
+Content-Disposition: form-data; name="resources.cpu"
+
+1
+--boundary
+Content-Disposition: form-data; name="resources.memory"
+
+128
+--boundary
+Content-Disposition: form-data; name="file"; filename="main.py"
+Content-Type: text/x-python
+
+< ./main.py
+--boundary--
+
+### Invoke Python Function
+POST http://localhost:8083/invoke
+Content-Type: application/json
+
+{
+    "name": "hello-python",
+    "payload": {
+        "key": "value"
+    }
+}
+
+### Register Java JAR Function
+POST http://localhost:8083/functions
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="name"
+
+hello-java
+--boundary
+Content-Disposition: form-data; name="type"
+
+lambda
+--boundary
+Content-Disposition: form-data; name="image"
+
+amazoncorretto:17
+--boundary
+Content-Disposition: form-data; name="execution.kind"
+
+java
+--boundary
+Content-Disposition: form-data; name="resources.cpu"
+
+1
+--boundary
+Content-Disposition: form-data; name="resources.memory"
+
+256
+--boundary
+Content-Disposition: form-data; name="file"; filename="handler.jar"
+Content-Type: application/java-archive
+
+< ./handler.jar
+--boundary--
+
+### Invoke Java Function
+POST http://localhost:8083/invoke
+Content-Type: application/json
+
+{
+    "name": "hello-java",
+    "payload": {
+        "input": "test-data"
+    }
+}
+
+### Register Docker Image Function
+POST http://localhost:8083/functions
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="name"
+
+hello-world
+--boundary
+Content-Disposition: form-data; name="type"
+
+lambda
+--boundary
+Content-Disposition: form-data; name="image"
+
+hello-world:latest
+--boundary
+Content-Disposition: form-data; name="execution.kind"
+
+image
+--boundary
+Content-Disposition: form-data; name="resources.cpu"
+
+1
+--boundary
+Content-Disposition: form-data; name="resources.memory"
+
+128
+--boundary--
+
+### Invoke Docker Image Function
+POST http://localhost:8083/invoke
+Content-Type: application/json
+
+{
+    "name": "hello-world",
+    "payload": {}
+}
+
+### Register Node.js Zip Function
+### Note: This requires a zip file named 'function.zip' in http_tests/
+### Containing 'index.js' and 'helper.js'
+POST http://localhost:8083/functions
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="name"
+
+hello-zip
+--boundary
+Content-Disposition: form-data; name="type"
+
+lambda
+--boundary
+Content-Disposition: form-data; name="image"
+
+node:18-alpine
+--boundary
+Content-Disposition: form-data; name="execution.kind"
+
+node
+--boundary
+Content-Disposition: form-data; name="resources.cpu"
+
+1
+--boundary
+Content-Disposition: form-data; name="resources.memory"
+
+128
+--boundary
+Content-Disposition: form-data; name="file"; filename="function.zip"
+Content-Type: application/zip
+
+< ./function.zip
+--boundary--
+
+### Invoke Node.js Zip Function
+POST http://localhost:8083/invoke
+Content-Type: application/json
+
+{
+    "name": "hello-zip",
+    "payload": {
+        "name": "Lambda Master"
+    }
+}
+
+
+
+

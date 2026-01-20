@@ -162,10 +162,14 @@ func main() {
 	// 0. Initialize Profile-based Configuration
 	config.InitProfiles()
 
-	// 0.1 Initialize Configuration from External Server (Optional fallback/additional)
-	configURL := getEnv("CONFIG_SERVER_URL", "http://localhost:8888/lambdaservice/dev")
-	if err := config.LoadConfig(configURL); err != nil {
-		logger.Log.Warn("Failed to load external configuration from server, continuing with local env", zap.String("url", configURL))
+	// 0.1 Initialize Configuration from External Server
+	configURL := os.Getenv("CONFIG_SERVER_URL")
+	if configURL != "" {
+		if err := config.LoadConfig(configURL); err != nil {
+			logger.Log.Warn("Failed to load external configuration from server, continuing with local env", zap.String("url", configURL), zap.Error(err))
+		}
+	} else {
+		logger.Log.Info("No CONFIG_SERVER_URL provided, skipping external configuration")
 	}
 
 	// Eureka Configuration

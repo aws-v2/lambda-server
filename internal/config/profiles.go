@@ -39,6 +39,7 @@ func InitProfiles() {
 	mapVar(profile, "DATASOURCE_PASSWORD", "DB_PASSWORD")
 	mapVar(profile, "NATS_URL", "NATS_URL")
 	mapVar(profile, "EUREKA_SERVER_URL", "EUREKA_SERVER_URL")
+	mapVar(profile, "CONFIG_SERVER_URL", "CONFIG_SERVER_URL")
 
 	// Post-process the DB_URL if it's JDBC-style
 	dbURL := os.Getenv("DB_URL")

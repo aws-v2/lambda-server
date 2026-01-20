@@ -159,14 +159,26 @@ func main() {
 	defer logger.Log.Sync()
 	logger.Log.Info("Starting Modular Lambda Service...")
 
-	// 0. Initialize Configuration from External Server
-	configURL := getEnv("CONFIG_SERVER_URL", "http://localhost:8888/lambdaservice/dev")
-	if err := config.LoadConfig(configURL); err != nil {
-		logger.Log.Fatal("Failed to load external configuration", zap.Error(err))
+	// 0. Initialize Profile-based Configuration
+	config.InitProfiles()
+
+	// 0.1 Initialize Configuration from External Server
+	configURL := os.Getenv("CONFIG_SERVER_URL")
+	if configURL != "" {
+		if err := config.LoadConfig(configURL); err != nil {
+			logger.Log.Warn("Failed to load external configuration from server, continuing with local env", zap.String("url", configURL), zap.Error(err))
+		}
+	} else {
+		logger.Log.Info("No CONFIG_SERVER_URL provided, skipping external configuration")
 	}
 
 	// Eureka Configuration
 	eurekaConfig := getEurekaConfig()
+	// Use resolved EUREKA_SERVER_URL if set
+	if resolvedURL := os.Getenv("EUREKA_SERVER_URL"); resolvedURL != "" {
+		eurekaConfig.ServerURL = resolvedURL
+	}
+
 	if err := registerWithEureka(eurekaConfig); err != nil {
 		logger.Log.Error("Failed to register with Eureka", zap.Error(err))
 	} else {

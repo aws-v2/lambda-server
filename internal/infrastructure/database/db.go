@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"lambda/internal/logger"
@@ -58,8 +59,11 @@ type DB struct {
 }
 
 func Connect(cfg Config) (*DB, error) {
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
+	connStr := os.Getenv("DB_URL")
+	if connStr == "" {
+		connStr = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
+	}
 
 	logger.Log.Debug("Connecting to database...", zap.String("host", cfg.Host), zap.String("dbname", cfg.DBName))
 	db, err := sql.Open("postgres", connStr)

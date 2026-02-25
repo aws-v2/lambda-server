@@ -43,8 +43,8 @@ func (s *Storage) SaveFunctionBinary(name string, reader io.Reader) (string, err
 		return "", fmt.Errorf("failed to save binary: %w", err)
 	}
 
-	// Return the absolute path
-	absPath, err := filepath.Abs(dstPath)
+	// Return the absolute path to the DIRECTORY
+	absPath, err := filepath.Abs(funcDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
@@ -54,7 +54,7 @@ func (s *Storage) SaveFunctionBinary(name string, reader io.Reader) (string, err
 func (s *Storage) SaveFunctionZip(name string, reader io.ReaderAt, size int64) (string, error) {
 	// Create directory: ./storage/functions/<name>/
 	funcDir := filepath.Join(s.BaseDir, "functions", name)
-	
+
 	// Clean the directory if it exists to avoid stale files
 	logger.Log.Debug("Cleaning function directory", zap.String("path", funcDir))
 	if err := os.RemoveAll(funcDir); err != nil {
@@ -111,4 +111,33 @@ func (s *Storage) SaveFunctionZip(name string, reader io.ReaderAt, size int64) (
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 	return absPath, nil
+}
+
+func (s *Storage) ReadFunctionFile(name string, filename string) ([]byte, error) {
+	// If filename is empty, default to "handler"
+	if filename == "" {
+		filename = "handler"
+	}
+
+	path := filepath.Join(s.BaseDir, "functions", name, filename)
+	logger.Log.Debug("Reading function file", zap.String("path", path))
+
+	return os.ReadFile(path)
+}
+
+func (s *Storage) WriteFunctionFile(name string, filename string, content []byte) error {
+	// If filename is empty, default to "handler"
+	if filename == "" {
+		filename = "handler"
+	}
+
+	funcDir := filepath.Join(s.BaseDir, "functions", name)
+	if err := os.MkdirAll(funcDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	path := filepath.Join(funcDir, filename)
+	logger.Log.Debug("Writing function file", zap.String("path", path))
+
+	return os.WriteFile(path, content, 0755)
 }

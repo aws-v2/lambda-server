@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"lambda/internal/domain/dto"
@@ -37,25 +38,59 @@ func NewLambdaHandlers(db *database.DB, nats *event.NatsClient, storage *storage
 }
 
 func (h *LambdaHandlers) Invoke(c *gin.Context) {
-	var req dto.InvokeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	name := c.Param("name")
+	var payload map[string]interface{}
+
+	if name == "" {
+		// Fallback to old behavior if not in URL
+		var req dto.InvokeRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required in URL or JSON body"})
+			return
+		}
+		name = req.Name
+		payload = req.Payload
+	} else {
+		// Read payload if provided in body
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&payload); err != nil {
+				// We don't necessarily error out, maybe empty payload is fine
+				logger.Log.Warn("Failed to bind invoke payload", zap.Error(err))
+			}
+		}
 	}
 
 	// Check if function exists in DB
 	l := logger.ForContext(c.Request.Context())
-	fn, err := h.DB.GetFunction(req.Name)
+	userID, _ := c.Get("user_id")
+	userIDStr := ""
+	if id, ok := userID.(string); ok {
+		userIDStr = id
+	}
+
+	fn, err := h.DB.GetFunction(name, userIDStr)
 	if err != nil {
-		l.Warn("Function lookup failed", zap.String("name", req.Name), zap.Error(err))
-		c.JSON(http.StatusNotFound, gin.H{"error": "Function not found"})
+		l.Warn("Function lookup failed", zap.String("name", name), zap.String("userID", userIDStr), zap.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Function not found or access denied"})
 		return
 	}
+
+	startTime := time.Now()
+	metric := database.LambdaMetric{
+		FunctionName: fn.Name,
+		UserID:       userIDStr,
+		Status:       "success",
+	}
+
+	defer func() {
+		metric.DurationMS = int(time.Since(startTime).Milliseconds())
+		h.DB.RecordMetric(metric)
+	}()
 
 	taskID := uuid.New().String()
 
 	// Stringify the payload for the env var
-	payloadData, _ := json.Marshal(req.Payload)
+	payloadData, _ := json.Marshal(payload)
 
 	// Prepare the Env map. Start with DB envs if any, then add dynamic PAYLOAD.
 	envMap := make(map[string]string)
@@ -125,6 +160,8 @@ func (h *LambdaHandlers) Invoke(c *gin.Context) {
 	})
 	if err != nil {
 		l.Error("Failed to subscribe to statuses", zap.String("taskID", taskID), zap.Error(err))
+		metric.Status = "error"
+		metric.ErrorMessage = "Failed to subscribe to status updates"
 		c.SSEvent("error", "Failed to subscribe to status updates")
 		return
 	}
@@ -144,6 +181,8 @@ func (h *LambdaHandlers) Invoke(c *gin.Context) {
 
 		if err != nil {
 			l.Error("NATS request failed", zap.String("taskID", taskID), zap.Error(err))
+			metric.Status = "error"
+			metric.ErrorMessage = fmt.Sprintf("NATS request failed: %v", err)
 			select {
 			case eventChan <- fmt.Sprintf(`{"status":"error", "message":"%v"}`, err):
 			case <-doneChan:
@@ -167,6 +206,18 @@ func (h *LambdaHandlers) Invoke(c *gin.Context) {
 			if msg == "DONE" {
 				return false
 			}
+
+			var eventData map[string]interface{}
+			if err := json.Unmarshal([]byte(msg), &eventData); err == nil {
+				if status, sOk := eventData["status"].(string); sOk && status == "error" {
+					metric.Status = "error"
+					if errMsg, mOk := eventData["message"].(string); mOk {
+						metric.ErrorMessage = errMsg
+					}
+					c.SSEvent("status", gin.H{"error": eventData})
+					return true
+				}
+			}
 			c.SSEvent("status", msg)
 			return true
 		}
@@ -181,6 +232,9 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	userID, _ := c.Get("user_id")
+	uIDStr, _ := userID.(string)
 
 	// 1. Handle Artifact (File vs Image)
 	var artifactPath string
@@ -204,7 +258,6 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 		}
 		defer openedFile.Close()
 
-
 		// Check if it's a zip file
 		ext := filepath.Ext(file.Filename)
 		isZip := ext == ".zip" || file.Header.Get("Content-Type") == "application/zip" || file.Header.Get("Content-Type") == "application/x-zip-compressed"
@@ -227,12 +280,47 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 		}
 	}
 
-	// Apply defaults
 	if req.Type == "" {
 		req.Type = "lambda"
 	}
+
+	// Graceful JSON parsing for stringified fields (common in multipart forms)
+	if len(req.Execution.Command) == 1 {
+		cmdStr := req.Execution.Command[0]
+		if strings.HasPrefix(cmdStr, "[") && strings.HasSuffix(cmdStr, "]") {
+			var parsed []string
+			if err := json.Unmarshal([]byte(cmdStr), &parsed); err == nil {
+				req.Execution.Command = parsed
+			}
+		}
+	}
+
+	// Try to parse Env if it was sent as a single JSON string
+	if len(req.Env) == 0 {
+		rawEnv := c.PostForm("env")
+		if rawEnv != "" && strings.HasPrefix(rawEnv, "{") && strings.HasSuffix(rawEnv, "}") {
+			var parsed map[string]string
+			if err := json.Unmarshal([]byte(rawEnv), &parsed); err == nil {
+				req.Env = parsed
+			}
+		}
+	}
 	if req.Execution.Kind == "" { // Fallback if not provided in form
 		req.Execution.Kind = "binary"
+	}
+
+	// Automatic image selection if not provided
+	if req.Image == "" {
+		switch req.Execution.Kind {
+		case "python":
+			req.Image = "python:3.10-slim"
+		case "node", "nodejs":
+			req.Image = "node:18-alpine"
+		case "java":
+			req.Image = "amazoncorretto:17"
+		default:
+			req.Image = "golang:1.22-alpine"
+		}
 	}
 	if req.Resources.CPU <= 0 {
 		req.Resources.CPU = 1 // Default to 1 CPU
@@ -243,21 +331,24 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 
 	// 2. Save metadata to Postgres
 	// Map DTO to Database Entity
+	// We force Command and Env to nil to leverage the fargate-server's internal robust execution logic
 	err := h.DB.SaveFunction(database.Function{
-		Name:  req.Name,
-		Type:  req.Type,
-		Image: req.Image,
+		Name:   req.Name,
+		UserID: uIDStr,
+		Type:   req.Type,
+		Image:  req.Image,
 		Execution: database.ExecutionDetails{
 			Kind:    req.Execution.Kind,
 			Path:    artifactPath, // Ignore user path, use actual storage path
-			Command: req.Execution.Command,
+			Command: nil,          // Force null to use executor fallbacks
 		},
 		Resources: database.ResourceDetails{
 			CPU:    req.Resources.CPU,
 			Memory: req.Resources.Memory,
 		},
-		Env:       req.Env,
-		TimeoutMS: req.TimeoutMS,
+		Env:         nil, // Force null to avoid empty object {} vs null issues
+		TimeoutMS:   req.TimeoutMS,
+		Description: req.Description,
 	})
 	if err != nil {
 		l := logger.ForContext(c.Request.Context())
@@ -271,4 +362,119 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 		"name":          req.Name,
 		"artifact_path": artifactPath,
 	})
+}
+
+func (h *LambdaHandlers) ListFunctions(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	functions, err := h.DB.ListFunctionsByUser(userIDStr)
+	if err != nil {
+		l := logger.ForContext(c.Request.Context())
+		l.Error("Failed to list functions", zap.String("userID", userIDStr), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch functions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, functions)
+}
+
+func (h *LambdaHandlers) GetFunction(c *gin.Context) {
+	name := c.Param("name")
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	fn, err := h.DB.GetFunction(name, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		return
+	}
+
+	c.JSON(http.StatusOK, fn)
+}
+
+func (h *LambdaHandlers) GetCode(c *gin.Context) {
+	name := c.Param("name")
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	// Verify ownership
+	_, err := h.DB.GetFunction(name, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		return
+	}
+
+	// Fetch code from storage
+	// We'll try "handler" first, as it's our default binary/script name
+	content, err := h.Storage.ReadFunctionFile(name, "handler")
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "code artifact not found"})
+		return
+	}
+
+	c.Data(http.StatusOK, "text/plain", content)
+}
+
+func (h *LambdaHandlers) UpdateCode(c *gin.Context) {
+	name := c.Param("name")
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	// Verify ownership
+	_, err := h.DB.GetFunction(name, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		return
+	}
+
+	// Read new code from body
+	content, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+		return
+	}
+
+	// Save to storage
+	err = h.Storage.WriteFunctionFile(name, "handler", content)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update code artifact"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "code updated successfully"})
+}
+
+func (h *LambdaHandlers) GetMetrics(c *gin.Context) {
+	name := c.Param("name")
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	metrics, err := h.DB.GetMetrics(name, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch metrics"})
+		return
+	}
+
+	c.JSON(http.StatusOK, metrics)
+}
+
+func (h *LambdaHandlers) UpdateConfig(c *gin.Context) {
+	name := c.Param("name")
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	var req dto.UpdateFunctionConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.DB.UpdateFunctionConfig(name, userIDStr, req.Memory, req.Timeout, req.Description)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update function configuration"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "configuration updated successfully"})
 }

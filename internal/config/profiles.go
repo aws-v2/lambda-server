@@ -38,16 +38,20 @@ func InitProfiles() {
 	mapVar(profile, "DATASOURCE_USERNAME", "DB_USER")
 	mapVar(profile, "DATASOURCE_PASSWORD", "DB_PASSWORD")
 	mapVar(profile, "NATS_URL", "NATS_URL")
+	mapVar(profile, "NATS_USERNAME", "NATS_USER")
+	mapVar(profile, "NATS_PASSWORD", "NATS_PASSWORD")
 	mapVar(profile, "EUREKA_SERVER_URL", "EUREKA_SERVER_URL")
 	mapVar(profile, "CONFIG_SERVER_URL", "CONFIG_SERVER_URL")
 
-	// Post-process the DB_URL if it's JDBC-style
-	dbURL := os.Getenv("DB_URL")
-	if strings.HasPrefix(dbURL, "jdbc:postgresql://") {
-		postgresURL := strings.Replace(dbURL, "jdbc:postgresql://", "postgres://", 1)
-		os.Setenv("DB_URL", postgresURL)
-		logger.Log.Info("Converted JDBC-style URL to PostgreSQL DSN", zap.String("url", postgresURL))
-	}
+	/*
+		// Post-process the DB_URL if it's JDBC-style
+		dbURL := os.Getenv("DB_URL")
+		if strings.HasPrefix(dbURL, "jdbc:postgresql://") {
+			postgresURL := strings.Replace(dbURL, "jdbc:postgresql://", "postgres://", 1)
+			os.Setenv("DB_URL", postgresURL)
+			logger.Log.Info("Converted JDBC-style URL to PostgreSQL DSN", zap.String("url", postgresURL))
+		}
+	*/
 }
 
 func mapVar(profile, suffix, target string) {

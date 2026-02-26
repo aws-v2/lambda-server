@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"lambda/internal/infrastructure/auth"
 	"lambda/internal/logger"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ZapMiddleware is a Gin middleware that logs requests using Zap and OpenTelemetry
@@ -60,8 +62,9 @@ func ZapMiddleware(serviceName string) gin.HandlerFunc {
 	}
 }
 
-// AuthMiddleware extracts the user ID from the JWT token without enforcing authentication (Trust Mode)
-func AuthMiddleware() gin.HandlerFunc {
+// AuthMiddleware extracts the user ID from the JWT token or Access Key headers.
+// It uses ApiKeyResolver to lazily load and verify Access Keys via NATS if not cached.
+func AuthMiddleware(resolver *auth.ApiKeyResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		userID := ""
@@ -83,6 +86,31 @@ func AuthMiddleware() gin.HandlerFunc {
 						userID = fmt.Sprintf("%v", id)
 					} else if sub, exists := claims["sub"]; exists {
 						userID = fmt.Sprintf("%v", sub)
+					}
+				}
+			}
+		}
+
+		// Check for Access Key authentication headers if JWT didn't resolve a userID
+		if userID == "" {
+			accessKeyID := c.GetHeader("X-Access-Key-Id")
+			secretKey := c.GetHeader("X-Secret-Access-Key")
+
+			if accessKeyID != "" && secretKey != "" {
+				// Resolve the key using the hybrid approach (Local DB -> NATS)
+				key, err := resolver.Resolve(c.Request.Context(), accessKeyID)
+				if err != nil {
+					logger.ForContext(c.Request.Context()).Warn("Failed to resolve API Key", zap.String("id", accessKeyID), zap.Error(err))
+				} else if key != nil {
+					// Perform BCrypt validation locally
+					if err := bcrypt.CompareHashAndPassword([]byte(key.SecretKeyHash), []byte(secretKey)); err != nil {
+						logger.ForContext(c.Request.Context()).Warn("API Key secret mismatch", zap.String("id", accessKeyID))
+					} else if !key.Enabled {
+						logger.ForContext(c.Request.Context()).Warn("API Key is disabled", zap.String("id", accessKeyID))
+					} else {
+						// Success! Set the real userID from the key owner
+						userID = key.UserID
+						logger.ForContext(c.Request.Context()).Debug("Authenticated via Access Key", zap.String("userID", userID))
 					}
 				}
 			}

@@ -6,7 +6,7 @@ Content-Type: multipart/form-data; boundary=boundary
 --boundary
 Content-Disposition: form-data; name="name"
 
-hello-go
+hello-gow
 --boundary
 Content-Disposition: form-data; name="type"
 
@@ -40,7 +40,7 @@ Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y
 Content-Type: application/json
 
 {
-  "name": "hello-go",
+  "name": "hello-gow",
   "payload": {
     "name": "World"
   }

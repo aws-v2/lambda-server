@@ -53,6 +53,7 @@ type ServerConfig struct {
 	Port        string
 	ServiceName string
 	StoragePath string
+	Region      string
 }
 
 type EurekaConfig struct {
@@ -82,6 +83,7 @@ func Load() (*Config, error) {
 			Port:        getEnv("PORT", "8053"),
 			ServiceName: getEnv("SERVICE_NAME", "lambda-service"),
 			StoragePath: getEnv("CODE_STORAGE_PATH", "./storage"),
+			Region:      getEnv("AWS_REGION", "eu-north-1"),
 		},
 		Eureka: EurekaConfig{
 			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),

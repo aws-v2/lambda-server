@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"lambda/internal/config"
+	"lambda/internal/infrastructure/auth"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/discovery"
 	"lambda/internal/infrastructure/event"
@@ -117,8 +118,9 @@ func main() {
 	storagePath := getEnv("CODE_STORAGE_PATH", "./storage")
 	codeStorage := storage.NewStorage(storagePath)
 
-	// 4. Initialize HTTP Handlers
-	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage)
+	// 4. Initialize Handlers and Auth Resolver
+	resolver := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
+	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region)
 
 	// 5. Setup Gin router
 	router := gin.New()

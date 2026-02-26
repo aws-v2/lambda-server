@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_functions_arn;
+ALTER TABLE functions DROP COLUMN IF EXISTS arn;

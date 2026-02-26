@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"lambda/internal/domain/dto"
+	"lambda/internal/infrastructure/auth"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
 	"lambda/internal/infrastructure/storage"
@@ -24,31 +25,116 @@ import (
 )
 
 type LambdaHandlers struct {
-	DB      *database.DB
-	Nats    *event.NatsClient
-	Storage *storage.Storage
+	DB       *database.DB
+	Nats     *event.NatsClient
+	Storage  *storage.Storage
+	Resolver *auth.ApiKeyResolver
+	Region   string
 }
 
-func NewLambdaHandlers(db *database.DB, nats *event.NatsClient, storage *storage.Storage) *LambdaHandlers {
+func NewLambdaHandlers(db *database.DB, nats *event.NatsClient, storage *storage.Storage, resolver *auth.ApiKeyResolver, region string) *LambdaHandlers {
 	return &LambdaHandlers{
-		DB:      db,
-		Nats:    nats,
-		Storage: storage,
+		DB:       db,
+		Nats:     nats,
+		Storage:  storage,
+		Resolver: resolver,
+		Region:   region,
+	}
+}
+
+// resolveIdentifier extracts the function identifier (name or ARN) from the Gin context.
+// Priority order:
+//  1. _resolved_arn – set by ArnRouter after stripping the sub-path suffix
+//  2. *arn wildcard param (raw, with leading slash stripped)
+//  3. :name regular param (name-based routes)
+func resolveIdentifier(c *gin.Context) string {
+	// 1. ArnRouter sets this after splitting off the sub-path suffix.
+	if resolvedArn, exists := c.Get("_resolved_arn"); exists {
+		if arn, ok := resolvedArn.(string); ok && arn != "" {
+			return arn
+		}
+	}
+	// 2. Raw wildcard param (direct ARN routes without sub-path)
+	if arn := c.Param("arn"); arn != "" {
+		return strings.TrimPrefix(arn, "/")
+	}
+	// 3. Name-based param
+	return c.Param("name")
+}
+
+// generateArn creates a Serwin Lambda ARN.
+// Format: arn:serwin:lambda:<region>:<userID>:function:<name>
+func (h *LambdaHandlers) generateArn(userID, name string) string {
+	region := h.Region
+	if region == "" {
+		region = "eu-north-1" // Safe fallback
+	}
+	return fmt.Sprintf("arn:serwin:lambda:%s:%s:function:%s", region, userID, name)
+}
+
+// resolveFunction looks up a function by name or ARN depending on the identifier.
+// If the identifier starts with "arn:" it uses the ARN-based lookup, otherwise by name.
+func (h *LambdaHandlers) resolveFunction(identifier, userID string) (*database.Function, error) {
+	if strings.HasPrefix(identifier, "arn:") {
+		return h.DB.GetFunctionByARN(identifier, userID)
+	}
+	return h.DB.GetFunction(identifier, userID)
+}
+
+// ArnRouter is a catch-all handler for all ARN-based routes registered under
+// /functions/arn/*arn. It splits the captured wildcard into the ARN itself and an
+// optional sub-path suffix (e.g. "/metrics", "/config", "/invoke", "/code") and
+// delegates to the appropriate handler.
+//
+// This is required because Gin does not allow registering multiple wildcard routes
+// with the same prefix (e.g. /*arn AND /*arn/metrics would conflict).
+func (h *LambdaHandlers) ArnRouter(c *gin.Context) {
+	// The wildcard includes a leading slash: e.g. "/arn:serwin:lambda:...:function:foo/metrics"
+	raw := strings.TrimPrefix(c.Param("arn"), "/")
+
+	// Known suffixes — must be checked longest-first to avoid false matches.
+	suffixes := []string{"/metrics", "/invoke", "/config", "/code", "/test"}
+	suffix := ""
+	arnStr := raw
+	for _, s := range suffixes {
+		if strings.HasSuffix(raw, s) {
+			arnStr = raw[:len(raw)-len(s)]
+			suffix = s
+			break
+		}
+	}
+
+	// Inject the clean ARN as the "arn" param so that resolveIdentifier picks it up.
+	// We can't modify c.Params directly, so we store it in the context.
+	c.Set("_resolved_arn", arnStr)
+
+	switch suffix {
+	case "/invoke", "/test":
+		h.Invoke(c)
+	case "/metrics":
+		h.GetMetrics(c)
+	case "/config":
+		h.UpdateConfig(c)
+	case "/code":
+		h.UpdateCode(c)
+	default:
+		// No suffix → GET the function metadata
+		h.GetFunction(c)
 	}
 }
 
 func (h *LambdaHandlers) Invoke(c *gin.Context) {
-	name := c.Param("name")
+	identifier := resolveIdentifier(c)
 	var payload map[string]interface{}
 
-	if name == "" {
+	if identifier == "" {
 		// Fallback to old behavior if not in URL
 		var req dto.InvokeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required in URL or JSON body"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name or arn is required in URL or JSON body"})
 			return
 		}
-		name = req.Name
+		identifier = req.Name
 		payload = req.Payload
 	} else {
 		// Read payload if provided in body
@@ -68,9 +154,9 @@ func (h *LambdaHandlers) Invoke(c *gin.Context) {
 		userIDStr = id
 	}
 
-	fn, err := h.DB.GetFunction(name, userIDStr)
+	fn, err := h.resolveFunction(identifier, userIDStr)
 	if err != nil {
-		l.Warn("Function lookup failed", zap.String("name", name), zap.String("userID", userIDStr), zap.Error(err))
+		l.Warn("Function lookup failed", zap.String("identifier", identifier), zap.String("userID", userIDStr), zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "Function not found or access denied"})
 		return
 	}
@@ -130,11 +216,6 @@ func (h *LambdaHandlers) Invoke(c *gin.Context) {
 	// Create a done channel to signal the NATS callback to stop
 	doneChan := make(chan struct{})
 	defer close(doneChan)
-	// defer close(eventChan) // We don't strictly need to close this if we rely on GC, but c.Stream might need it.
-	// If c.Stream reads until close, we need to close it.
-	// But c.Stream API takes a callback that returns bool. We return false on "DONE".
-	// So we don't *need* to close eventChan to stop c.Stream. We stop c.Stream by returning false.
-	// So let's NOT close eventChan manually to avoid the panic.
 
 	// Subscribe to status updates for this task
 	sub, err := h.Nats.Subscribe("task.status.>", func(m *github_nats.Msg) {
@@ -332,8 +413,10 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 	// 2. Save metadata to Postgres
 	// Map DTO to Database Entity
 	// We force Command and Env to nil to leverage the fargate-server's internal robust execution logic
+	arn := h.generateArn(uIDStr, req.Name)
 	err := h.DB.SaveFunction(database.Function{
 		Name:   req.Name,
+		ARN:    arn,
 		UserID: uIDStr,
 		Type:   req.Type,
 		Image:  req.Image,
@@ -380,11 +463,11 @@ func (h *LambdaHandlers) ListFunctions(c *gin.Context) {
 }
 
 func (h *LambdaHandlers) GetFunction(c *gin.Context) {
-	name := c.Param("name")
+	identifier := resolveIdentifier(c)
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
 
-	fn, err := h.DB.GetFunction(name, userIDStr)
+	fn, err := h.resolveFunction(identifier, userIDStr)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
 		return
@@ -394,12 +477,12 @@ func (h *LambdaHandlers) GetFunction(c *gin.Context) {
 }
 
 func (h *LambdaHandlers) GetCode(c *gin.Context) {
-	name := c.Param("name")
+	identifier := resolveIdentifier(c)
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
 
-	// Verify ownership
-	_, err := h.DB.GetFunction(name, userIDStr)
+	// Verify ownership & get function name (needed for storage path)
+	fn, err := h.resolveFunction(identifier, userIDStr)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
 		return
@@ -407,7 +490,7 @@ func (h *LambdaHandlers) GetCode(c *gin.Context) {
 
 	// Fetch code from storage
 	// We'll try "handler" first, as it's our default binary/script name
-	content, err := h.Storage.ReadFunctionFile(name, "handler")
+	content, err := h.Storage.ReadFunctionFile(fn.Name, "handler")
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "code artifact not found"})
 		return
@@ -417,12 +500,12 @@ func (h *LambdaHandlers) GetCode(c *gin.Context) {
 }
 
 func (h *LambdaHandlers) UpdateCode(c *gin.Context) {
-	name := c.Param("name")
+	identifier := resolveIdentifier(c)
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
 
-	// Verify ownership
-	_, err := h.DB.GetFunction(name, userIDStr)
+	// Verify ownership & get function name (needed for storage path)
+	fn, err := h.resolveFunction(identifier, userIDStr)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
 		return
@@ -436,7 +519,7 @@ func (h *LambdaHandlers) UpdateCode(c *gin.Context) {
 	}
 
 	// Save to storage
-	err = h.Storage.WriteFunctionFile(name, "handler", content)
+	err = h.Storage.WriteFunctionFile(fn.Name, "handler", content)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update code artifact"})
 		return
@@ -446,11 +529,18 @@ func (h *LambdaHandlers) UpdateCode(c *gin.Context) {
 }
 
 func (h *LambdaHandlers) GetMetrics(c *gin.Context) {
-	name := c.Param("name")
+	identifier := resolveIdentifier(c)
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
 
-	metrics, err := h.DB.GetMetrics(name, userIDStr)
+	// Resolve function to get canonical name (metrics are stored by name)
+	fn, err := h.resolveFunction(identifier, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		return
+	}
+
+	metrics, err := h.DB.GetMetrics(fn.Name, userIDStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch metrics"})
 		return
@@ -460,7 +550,7 @@ func (h *LambdaHandlers) GetMetrics(c *gin.Context) {
 }
 
 func (h *LambdaHandlers) UpdateConfig(c *gin.Context) {
-	name := c.Param("name")
+	identifier := resolveIdentifier(c)
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
 
@@ -470,7 +560,14 @@ func (h *LambdaHandlers) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	err := h.DB.UpdateFunctionConfig(name, userIDStr, req.Memory, req.Timeout, req.Description)
+	// Resolve function to get canonical name (config update uses name)
+	fn, err := h.resolveFunction(identifier, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		return
+	}
+
+	err = h.DB.UpdateFunctionConfig(fn.Name, userIDStr, req.Memory, req.Timeout, req.Description)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update function configuration"})
 		return

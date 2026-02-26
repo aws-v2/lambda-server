@@ -56,6 +56,7 @@ type ResourceDetails struct {
 
 type Function struct {
 	Name        string
+	ARN         string
 	UserID      string
 	Type        string
 	Image       string
@@ -85,6 +86,14 @@ type LambdaMetricsResponse struct {
 	Duration    float64         `json:"duration"` // Avg duration as float64
 	Errors      int             `json:"errors"`
 	Timeline    []TimelinePoint `json:"timeline"`
+}
+
+type ApiKey struct {
+	AccessKeyID   string    `json:"access_key_id"`
+	UserID        string    `json:"user_id"`
+	SecretKeyHash string    `json:"secret_key_hash"`
+	Enabled       bool      `json:"enabled"`
+	LastSynced    time.Time `json:"last_synced"`
 }
 
 type DB struct {
@@ -189,9 +198,10 @@ func (db *DB) SaveFunction(f Function) error {
 	envData, _ := json.Marshal(f.Env)
 
 	query := `
-	INSERT INTO functions (name, user_id, type, image, execution, resources, env, timeout_ms, description)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	INSERT INTO functions (name, arn, user_id, type, image, execution, resources, env, timeout_ms, description)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	ON CONFLICT (name) DO UPDATE SET
+		arn = EXCLUDED.arn,
 		user_id = EXCLUDED.user_id,
 		type = EXCLUDED.type,
 		image = EXCLUDED.image,
@@ -201,7 +211,7 @@ func (db *DB) SaveFunction(f Function) error {
 		timeout_ms = EXCLUDED.timeout_ms,
 		description = EXCLUDED.description;`
 
-	_, err := db.conn.Exec(query, f.Name, f.UserID, f.Type, f.Image, execData, resData, envData, f.TimeoutMS, f.Description)
+	_, err := db.conn.Exec(query, f.Name, f.ARN, f.UserID, f.Type, f.Image, execData, resData, envData, f.TimeoutMS, f.Description)
 	if err != nil {
 		logger.Log.Error("Failed to save function", zap.String("name", f.Name), zap.Error(err))
 		return err
@@ -211,12 +221,12 @@ func (db *DB) SaveFunction(f Function) error {
 
 func (db *DB) GetFunction(name string, userID string) (*Function, error) {
 	logger.Log.Debug("Fetching function...", zap.String("name", name), zap.String("userID", userID))
-	query := `SELECT name, user_id, type, image, execution, resources, env, timeout_ms, description FROM functions WHERE name = $1 AND user_id = $2`
+	query := `SELECT name, arn, user_id, type, image, execution, resources, env, timeout_ms, description FROM functions WHERE name = $1 AND user_id = $2`
 	var f Function
-	var image, uID, desc sql.NullString
+	var image, uID, desc, arn sql.NullString
 	var execData, resData, envData []byte
 
-	err := db.conn.QueryRow(query, name, userID).Scan(&f.Name, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc)
+	err := db.conn.QueryRow(query, name, userID).Scan(&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			logger.Log.Warn("Function not found", zap.String("name", name), zap.String("userID", userID))
@@ -227,6 +237,35 @@ func (db *DB) GetFunction(name string, userID string) (*Function, error) {
 	}
 	f.Image = image.String
 	f.UserID = uID.String
+	f.ARN = arn.String
+
+	json.Unmarshal(execData, &f.Execution)
+	json.Unmarshal(resData, &f.Resources)
+	json.Unmarshal(envData, &f.Env)
+	f.Description = desc.String
+
+	return &f, nil
+}
+
+func (db *DB) GetFunctionByARN(arn string, userID string) (*Function, error) {
+	logger.Log.Debug("Fetching function by ARN...", zap.String("arn", arn), zap.String("userID", userID))
+	query := `SELECT name, arn, user_id, type, image, execution, resources, env, timeout_ms, description FROM functions WHERE arn = $1 AND user_id = $2`
+	var f Function
+	var image, uID, desc, savedArn sql.NullString
+	var execData, resData, envData []byte
+
+	err := db.conn.QueryRow(query, arn, userID).Scan(&f.Name, &savedArn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			logger.Log.Warn("Function not found by ARN", zap.String("arn", arn), zap.String("userID", userID))
+		} else {
+			logger.Log.Error("Failed to get function by ARN", zap.String("arn", arn), zap.Error(err))
+		}
+		return nil, err
+	}
+	f.Image = image.String
+	f.UserID = uID.String
+	f.ARN = savedArn.String
 
 	json.Unmarshal(execData, &f.Execution)
 	json.Unmarshal(resData, &f.Resources)
@@ -315,7 +354,7 @@ func (db *DB) GetMetrics(name string, userID string) (*LambdaMetricsResponse, er
 
 func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 	logger.Log.Debug("Listing functions for user...", zap.String("userID", userID))
-	query := `SELECT name, user_id, type, image, execution, resources, env, timeout_ms, description FROM functions WHERE user_id = $1`
+	query := `SELECT name, arn, user_id, type, image, execution, resources, env, timeout_ms, description FROM functions WHERE user_id = $1`
 
 	rows, err := db.conn.Query(query, userID)
 	if err != nil {
@@ -327,16 +366,17 @@ func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 	var functions []Function
 	for rows.Next() {
 		var f Function
-		var image, uID, desc sql.NullString
+		var image, uID, desc, arn sql.NullString
 		var execData, resData, envData []byte
 
-		if err := rows.Scan(&f.Name, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc); err != nil {
+		if err := rows.Scan(&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc); err != nil {
 			logger.Log.Error("Failed to scan function row", zap.Error(err))
 			continue
 		}
 		f.Image = image.String
 		f.UserID = uID.String
 		f.Description = desc.String
+		f.ARN = arn.String
 		json.Unmarshal(execData, &f.Execution)
 		json.Unmarshal(resData, &f.Resources)
 		json.Unmarshal(envData, &f.Env)
@@ -344,6 +384,40 @@ func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 	}
 
 	return functions, nil
+}
+
+func (db *DB) GetApiKey(accessKeyID string) (*ApiKey, error) {
+	logger.Log.Debug("Fetching API key from cache...", zap.String("accessKeyID", accessKeyID))
+	query := `SELECT access_key_id, user_id, secret_key_hash, enabled, last_synced FROM api_keys WHERE access_key_id = $1`
+	var k ApiKey
+	err := db.conn.QueryRow(query, accessKeyID).Scan(&k.AccessKeyID, &k.UserID, &k.SecretKeyHash, &k.Enabled, &k.LastSynced)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		logger.Log.Error("Failed to get API key from cache", zap.Error(err))
+		return nil, err
+	}
+	return &k, nil
+}
+
+func (db *DB) SaveApiKey(k ApiKey) error {
+	logger.Log.Debug("Caching API key...", zap.String("accessKeyID", k.AccessKeyID))
+	query := `
+	INSERT INTO api_keys (access_key_id, user_id, secret_key_hash, enabled, last_synced)
+	VALUES ($1, $2, $3, $4, $5)
+	ON CONFLICT (access_key_id) DO UPDATE SET
+		user_id = EXCLUDED.user_id,
+		secret_key_hash = EXCLUDED.secret_key_hash,
+		enabled = EXCLUDED.enabled,
+		last_synced = EXCLUDED.last_synced;`
+
+	_, err := db.conn.Exec(query, k.AccessKeyID, k.UserID, k.SecretKeyHash, k.Enabled, k.LastSynced)
+	if err != nil {
+		logger.Log.Error("Failed to save API key to cache", zap.Error(err))
+		return err
+	}
+	return nil
 }
 
 func (db *DB) Close() error {

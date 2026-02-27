@@ -1,0 +1,49 @@
+### Create Policy
+POST http://localhost:8053/api/v1/policies
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
+Content-Type: application/json
+
+{
+  "account_id": "acc-123",
+  "principal_arn": "arn:serw:iam::acc-123:role/lambda-role",
+  "policy_name": "lambda-s3-access",
+  "policy_document": {
+    "Version": "2025-01-01",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["s3:PutObject"],
+        "Resource": ["arn:serw:s3:region:acc-123:bucket/images/*"]
+      }
+    ]
+  }
+}
+
+### Update Policy
+PUT http://localhost:8053/api/v1/policies/pol-123
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
+Content-Type: application/json
+
+{
+  "account_id": "acc-123",
+  "principal_arn": "arn:serw:iam::acc-123:role/lambda-role",
+  "policy_name": "updated-s3-access",
+  "policy_document": {
+    "Version": "2025-01-01",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["s3:PutObject", "s3:GetObject"],
+        "Resource": ["arn:serw:s3:region:acc-123:bucket/images/*"]
+      }
+    ]
+  }
+}
+
+### Get Policy
+GET http://localhost:8053/api/v1/policies/pol-123
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
+
+### Delete Policy
+DELETE http://localhost:8053/api/v1/policies/pol-123
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.

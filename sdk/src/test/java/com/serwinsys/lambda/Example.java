@@ -12,9 +12,7 @@ public class Example {
                 System.getenv().getOrDefault("LAMBDA_ACCESS_KEY", "AKIAPQOQ22BFO8K2CT0Z"),
                 System.getenv().getOrDefault("LAMBDA_SECRET_KEY", "pjEspdB9IeF6o98fXrMaQcPeF5K/a/JTSop64vjF"));
 
-        SerwinLambdaClient client = new SerwinLambdaClient(
-                System.getenv().getOrDefault("LAMBDA_BASE_URL", "http://localhost:8053"),
-                credentials);
+        SerwinLambdaClient client = new SerwinLambdaClient(credentials);
 
         try {
             // 1. List functions

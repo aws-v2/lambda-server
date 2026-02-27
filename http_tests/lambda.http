@@ -284,3 +284,38 @@ Content-Type: application/json
 
 
 
+### Get Lambda Docs Manifest
+GET http://localhost:8053/api/v1/lambda/docs
+
+### Get Lambda Doc by Slug: lambda-overview
+GET http://localhost:8053/api/v1/lambda/docs/lambda-overview
+
+### Get Lambda Doc by Slug: lambda-quickstart
+GET http://localhost:8053/api/v1/lambda/docs/lambda-quickstart
+
+### Get Lambda Doc by Slug: lambda-lifecycle
+GET http://localhost:8053/api/v1/lambda/docs/lambda-lifecycle
+
+### Get Lambda Doc by Slug: lambda-runtimes
+GET http://localhost:8053/api/v1/lambda/docs/lambda-runtimes
+
+### Get Lambda Doc by Slug: lambda-env-vars
+GET http://localhost:8053/api/v1/lambda/docs/lambda-env-vars
+
+### Get Lambda Doc by Slug: lambda-layers
+GET http://localhost:8053/api/v1/lambda/docs/lambda-layers
+
+### Get Lambda Doc by Slug: lambda-triggers
+GET http://localhost:8053/api/v1/lambda/docs/lambda-triggers
+
+### Get Lambda Doc by Slug: lambda-event-sources
+GET http://localhost:8053/api/v1/lambda/docs/lambda-event-sources
+
+### Get Lambda Doc by Slug: lambda-monitoring
+GET http://localhost:8053/api/v1/lambda/docs/lambda-monitoring
+
+### Get Lambda Doc by Slug: lambda-limits
+GET http://localhost:8053/api/v1/lambda/docs/lambda-limits
+
+### Get Lambda Doc - Not Found (404)
+GET http://localhost:8053/api/v1/lambda/docs/does-not-exist

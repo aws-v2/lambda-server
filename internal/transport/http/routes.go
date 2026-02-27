@@ -44,4 +44,8 @@ func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers) {
 	router.GET("/api/v1/lambda/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+
+	// ── Public documentation endpoints (no auth required) ─────────────────────
+	router.GET("/api/v1/lambda/docs", handlers.GetManifest)
+	router.GET("/api/v1/lambda/docs/:slug", handlers.GetDocBySlug)
 }

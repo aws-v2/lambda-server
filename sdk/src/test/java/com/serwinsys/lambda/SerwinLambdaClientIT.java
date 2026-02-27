@@ -31,7 +31,6 @@ public class SerwinLambdaClientIT {
 
     @BeforeAll
     void setup() {
-        String baseUrl = System.getenv().getOrDefault("LAMBDA_BASE_URL", "http://localhost:8053");
         functionName = System.getenv().getOrDefault("LAMBDA_TEST_FUNCTION", "hello-go");
         functionArn = System.getenv("LAMBDA_TEST_ARN");
 
@@ -39,10 +38,8 @@ public class SerwinLambdaClientIT {
         String secretKey = System.getenv().getOrDefault("LAMBDA_SECRET_KEY",
                 "pjEspdB9IeF6o98fXrMaQcPeF5K/a/JTSop64vjF");
 
-        Assumptions.assumeTrue(baseUrl != null, "LAMBDA_BASE_URL must be set");
-
         SerwinCredentials credentials = new SerwinCredentials(accessKey, secretKey);
-        client = new SerwinLambdaClient(baseUrl, credentials, Duration.ofSeconds(30));
+        client = new SerwinLambdaClient(credentials, Duration.ofSeconds(30));
     }
 
     @Test

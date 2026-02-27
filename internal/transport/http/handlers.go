@@ -1,11 +1,14 @@
 package http
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -574,4 +577,170 @@ func (h *LambdaHandlers) UpdateConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "configuration updated successfully"})
+}
+
+// ── Documentation Handlers ────────────────────────────────────────────────────
+
+// docsBasePath returns the path to the docs/lambda directory, resolved relative
+// to the working directory of the running process (which is the project root when
+// run via `go run` or the compiled binary).
+func docsBasePath() string {
+	return filepath.Join("docs", "lambda")
+}
+
+// GetManifest serves GET /api/v1/lambda/docs
+// Returns the full docs table-of-contents from docs/lambda/manifest.json.
+func (h *LambdaHandlers) GetManifest(c *gin.Context) {
+	manifestPath := filepath.Join(docsBasePath(), "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read docs manifest"})
+		return
+	}
+
+	var manifest interface{}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse docs manifest"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": manifest})
+}
+
+// docMetadata holds the parsed YAML front-matter fields from a .md file.
+type docMetadata struct {
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Icon        string   `json:"icon"`
+	LastUpdated string   `json:"lastUpdated"`
+	Tags        []string `json:"tags"`
+}
+
+// parseDocFile reads a markdown file and splits it into front-matter metadata
+// and body content. Front-matter is expected to be a YAML block delimited by
+// triple-dashes (---) at the top of the file.
+func parseDocFile(path string) (*docMetadata, string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, "", err
+	}
+
+	content := string(data)
+	meta := &docMetadata{}
+
+	// Check for YAML front-matter block
+	if !strings.HasPrefix(strings.TrimSpace(content), "---") {
+		return meta, content, nil
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	var fmLines []string
+	var bodyLines []string
+	inFrontMatter := false
+	fmClosed := false
+	lineCount := 0
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		lineCount++
+
+		if lineCount == 1 && line == "---" {
+			inFrontMatter = true
+			continue
+		}
+		if inFrontMatter && line == "---" {
+			inFrontMatter = false
+			fmClosed = true
+			continue
+		}
+		if inFrontMatter {
+			fmLines = append(fmLines, line)
+		} else if fmClosed {
+			bodyLines = append(bodyLines, line)
+		}
+	}
+
+	// Simple key-value YAML parser (handles string scalars and string lists)
+	parseSimpleYAML(fmLines, meta)
+
+	body := strings.TrimSpace(strings.Join(bodyLines, "\n"))
+	return meta, body, nil
+}
+
+// parseSimpleYAML parses a flat YAML-like list of lines into docMetadata.
+// Supports: plain scalar values and simple inline string lists (- item).
+func parseSimpleYAML(lines []string, meta *docMetadata) {
+	var currentKey string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		// List item
+		if strings.HasPrefix(trimmed, "- ") {
+			value := strings.TrimPrefix(trimmed, "- ")
+			value = strings.Trim(value, "\"'")
+			if currentKey == "tags" {
+				meta.Tags = append(meta.Tags, value)
+			}
+			continue
+		}
+		// Key: value
+		if idx := strings.Index(trimmed, ":"); idx != -1 {
+			key := strings.TrimSpace(trimmed[:idx])
+			value := strings.TrimSpace(trimmed[idx+1:])
+			value = strings.Trim(value, "\"'")
+			currentKey = key
+			switch key {
+			case "title":
+				meta.Title = value
+			case "description":
+				meta.Description = value
+			case "icon":
+				meta.Icon = value
+			case "lastUpdated":
+				meta.LastUpdated = value
+			}
+		}
+	}
+}
+
+// GetDocBySlug serves GET /api/v1/lambda/docs/:slug
+// Reads docs/lambda/<slug>.md, parses front-matter, and returns structured JSON.
+func (h *LambdaHandlers) GetDocBySlug(c *gin.Context) {
+	slug := c.Param("slug")
+
+	// Sanitize: only allow alphanumeric and dashes to prevent path traversal
+	for _, ch := range slug {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-') {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid slug"})
+			return
+		}
+	}
+
+	docPath := filepath.Join(docsBasePath(), slug+".md")
+	meta, content, err := parseDocFile(docPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("doc not found: %s", slug)})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read doc"})
+		return
+	}
+
+	// Fill in defaults for missing metadata
+	if meta.LastUpdated == "" {
+		meta.LastUpdated = time.Now().Format("2006-01-02")
+	}
+	if meta.Icon == "" {
+		meta.Icon = "cpu"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"metadata": meta,
+			"content":  content,
+		},
+	})
 }

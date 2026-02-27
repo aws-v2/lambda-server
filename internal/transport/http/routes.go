@@ -45,6 +45,16 @@ func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	// ── Policy routes ──────────────────────────────────────────────────────────
+	policies := router.Group("/api/v1/policies")
+	policies.Use(AuthMiddleware(handlers.Resolver))
+	{
+		policies.POST("", handlers.CreatePolicy)
+		policies.PUT("/:policy_id", handlers.UpdatePolicy)
+		policies.DELETE("/:policy_id", handlers.DeletePolicy)
+		policies.GET("/:policy_id", handlers.GetPolicy)
+	}
+
 	// ── Public documentation endpoints (no auth required) ─────────────────────
 	router.GET("/api/v1/lambda/docs", handlers.GetManifest)
 	router.GET("/api/v1/lambda/docs/:slug", handlers.GetDocBySlug)

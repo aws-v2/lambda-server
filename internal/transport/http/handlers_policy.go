@@ -51,9 +51,9 @@ func (h *LambdaHandlers) UpdatePolicy(c *gin.Context) {
 }
 
 func (h *LambdaHandlers) DeletePolicy(c *gin.Context) {
-	principalID := c.Param("principal_id")
+	policyID := c.Param("policy_id")
 	h.handlePolicyOperation(c, "delete", &dto.PolicyEvent{
-		PrincipalID: principalID,
+		PolicyID: policyID,
 	})
 }
 

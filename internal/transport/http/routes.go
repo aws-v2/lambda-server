@@ -32,7 +32,7 @@ func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers) {
 	{
 		policies.POST("", handlers.CreatePolicy)
 		policies.PUT("/:policy_id", handlers.UpdatePolicy)
-		policies.DELETE("/:principal_id", handlers.DeletePolicy)
+		policies.DELETE("/:policy_id", handlers.DeletePolicy)
 		policies.GET("/:principal_id", handlers.GetPolicy)
 	}
 

@@ -1,0 +1,53 @@
+{"level":"info","ts":1772266187.5777323,"caller":"api/main.go:26","msg":"Starting Modular Lambda Service..."}
+{"level":"info","ts":1772266187.5785327,"caller":"config/profiles.go:21","msg":".env file loaded successfully"}
+{"level":"info","ts":1772266187.5788329,"caller":"config/profiles.go:31","msg":"Active Profile","profile":"DEV"}
+{"level":"info","ts":1772266187.5789876,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_DATASOURCE_URL","to":"DB_URL","value":"jdbc:postgresql://localhost:5432"}
+{"level":"info","ts":1772266187.5791013,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_DATASOURCE_USERNAME","to":"DB_USER","value":"root"}
+{"level":"info","ts":1772266187.5791836,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_DATASOURCE_PASSWORD","to":"DB_PASSWORD","value":"****"}
+{"level":"info","ts":1772266187.5792837,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_NATS_URL","to":"NATS_URL","value":"nats://auth-server:auth-secret@localhost:4222"}
+{"level":"info","ts":1772266187.5794377,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_NATS_USERNAME","to":"NATS_USER","value":"auth-server"}
+{"level":"info","ts":1772266187.5794673,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_NATS_PASSWORD","to":"NATS_PASSWORD","value":"****"}
+{"level":"info","ts":1772266187.5794823,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_EUREKA_SERVER_URL","to":"EUREKA_SERVER_URL","value":"http://localhost:8761/eureka"}
+{"level":"info","ts":1772266187.5794961,"caller":"config/profiles.go:67","msg":"Mapped environment variable","from":"DEV_CONFIG_SERVER_URL","to":"CONFIG_SERVER_URL","value":"http://localhost:8888/lambdaservice/dev"}
+{"level":"info","ts":1772266187.5874503,"caller":"discovery/eureka.go:95","msg":"✅ Successfully registered with Eureka server","url":"http://localhost:8761/eureka"}
+{"level":"info","ts":1772266187.5893388,"caller":"api/main.go:66","msg":"Connected to NATS","url":"nats://auth-server:auth-secret@localhost:4222"}
+{"level":"info","ts":1772266187.592266,"caller":"api/main.go:86","msg":"Attempting to connect to PostgreSQL...","attempt":1}
+{"level":"info","ts":1772266187.602918,"caller":"api/main.go:106","msg":"Successfully connected to PostgreSQL"}
+{"level":"info","ts":1772266187.6031566,"caller":"database/db.go:159","msg":"Running database migrations...","path":"internal/infrastructure/migrations","driver":"postgres"}
+{"level":"info","ts":1772266187.614586,"caller":"database/db.go:188","msg":"Database migrations applied successfully"}
+{"level":"info","ts":1772266187.6146452,"caller":"api/main.go:114","msg":"Database migrations completed"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /metrics                  --> main.main.WrapH.func2 (3 handlers)
+[GIN-debug] GET    /api/v1/lambda/health     --> lambda/internal/transport/http.SetupRoutes.func1 (3 handlers)
+[GIN-debug] GET    /api/v1/lambda/docs       --> lambda/internal/transport/http.(*LambdaHandlers).GetManifest-fm (3 handlers)
+[GIN-debug] GET    /api/v1/lambda/docs/:slug --> lambda/internal/transport/http.(*LambdaHandlers).GetDocBySlug-fm (3 handlers)
+[GIN-debug] POST   /api/v1/lambda/functions  --> lambda/internal/transport/http.(*LambdaHandlers).RegisterFunction-fm (4 handlers)
+[GIN-debug] GET    /api/v1/lambda/functions  --> lambda/internal/transport/http.(*LambdaHandlers).ListFunctions-fm (4 handlers)
+[GIN-debug] GET    /api/v1/lambda/functions/:name --> lambda/internal/transport/http.(*LambdaHandlers).GetFunction-fm (4 handlers)
+[GIN-debug] GET    /api/v1/lambda/functions/:name/code --> lambda/internal/transport/http.(*LambdaHandlers).GetCode-fm (4 handlers)
+[GIN-debug] PATCH  /api/v1/lambda/functions/:name/code --> lambda/internal/transport/http.(*LambdaHandlers).UpdateCode-fm (4 handlers)
+[GIN-debug] GET    /api/v1/lambda/functions/:name/metrics --> lambda/internal/transport/http.(*LambdaHandlers).GetMetrics-fm (4 handlers)
+[GIN-debug] PATCH  /api/v1/lambda/functions/:name/config --> lambda/internal/transport/http.(*LambdaHandlers).UpdateConfig-fm (4 handlers)
+[GIN-debug] POST   /api/v1/lambda/functions/:name/invoke --> lambda/internal/transport/http.(*LambdaHandlers).Invoke-fm (4 handlers)
+[GIN-debug] POST   /api/v1/lambda/functions/:name/test --> lambda/internal/transport/http.(*LambdaHandlers).Invoke-fm (4 handlers)
+[GIN-debug] GET    /api/v1/lambda/functions/arn/*arn --> lambda/internal/transport/http.(*LambdaHandlers).ArnRouter-fm (4 handlers)
+[GIN-debug] POST   /api/v1/lambda/functions/arn/*arn --> lambda/internal/transport/http.(*LambdaHandlers).ArnRouter-fm (4 handlers)
+[GIN-debug] PATCH  /api/v1/lambda/functions/arn/*arn --> lambda/internal/transport/http.(*LambdaHandlers).ArnRouter-fm (4 handlers)
+[GIN-debug] POST   /api/v1/lambda/invoke     --> lambda/internal/transport/http.(*LambdaHandlers).Invoke-fm (4 handlers)
+[GIN-debug] POST   /api/v1/lambda/policies   --> lambda/internal/transport/http.(*LambdaHandlers).CreatePolicy-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/lambda/policies/:policy_id --> lambda/internal/transport/http.(*LambdaHandlers).UpdatePolicy-fm (4 handlers)
+[GIN-debug] DELETE /api/v1/lambda/policies/:policy_id --> lambda/internal/transport/http.(*LambdaHandlers).DeletePolicy-fm (4 handlers)
+[GIN-debug] GET    /api/v1/lambda/policies/:policy_id --> lambda/internal/transport/http.(*LambdaHandlers).GetPolicy-fm (4 handlers)
+{"level":"info","ts":1772266187.6150448,"caller":"api/main.go:135","msg":"Lambda Service starting","port":"8053"}
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8053
+{"level":"info","ts":1772266203.671561,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"7fb17e09-06e6-456c-87d6-baf848056f01","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"curl/7.81.0","latency":0.00000858}
+{"level":"info","ts":1772266370.605708,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"914f5346-2fca-451d-aba5-4a1aa9673b1a","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"vscode-restclient","latency":0.000010958}
+{"level":"info","ts":1772266373.5985508,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"627b30d0-5e0b-42c2-9bf8-5606571298bc","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"vscode-restclient","latency":0.000011743}
+{"level":"info","ts":1772266379.2318304,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"7aa81eb5-76c9-455a-9b56-361107ceca46","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"vscode-restclient","latency":0.000008554}
+{"level":"info","ts":1772266380.1789846,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"4058f130-517f-45d8-a95c-9154d6899ada","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"vscode-restclient","latency":0.000013774}
+signal: terminated

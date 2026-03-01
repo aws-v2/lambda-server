@@ -24,10 +24,11 @@ func (h *LambdaHandlers) CreatePolicy(c *gin.Context) {
 	}
 
 	h.handlePolicyOperation(c, "create", &dto.PolicyEvent{
-		AccountID:      req.AccountID,
-		PrincipalArn:   req.PrincipalArn,
-		PolicyName:     req.PolicyName,
-		PolicyDocument: &req.PolicyDocument,
+		AccountID:    req.AccountID,
+		PrincipalID:  req.PrincipalID,
+		ResourceType: req.ResourceType,
+		ResourceID:   req.ResourceID,
+		Action:       req.Action,
 	})
 }
 
@@ -40,25 +41,26 @@ func (h *LambdaHandlers) UpdatePolicy(c *gin.Context) {
 	}
 
 	h.handlePolicyOperation(c, "update", &dto.PolicyEvent{
-		PolicyID:       policyID,
-		AccountID:      req.AccountID,
-		PrincipalArn:   req.PrincipalArn,
-		PolicyName:     req.PolicyName,
-		PolicyDocument: &req.PolicyDocument,
+		PolicyID:     policyID,
+		AccountID:    req.AccountID,
+		PrincipalID:  req.PrincipalID,
+		ResourceType: req.ResourceType,
+		ResourceID:   req.ResourceID,
+		Action:       req.Action,
 	})
 }
 
 func (h *LambdaHandlers) DeletePolicy(c *gin.Context) {
-	policyID := c.Param("policy_id")
+	principalID := c.Param("principal_id")
 	h.handlePolicyOperation(c, "delete", &dto.PolicyEvent{
-		PolicyID: policyID,
+		PrincipalID: principalID,
 	})
 }
 
 func (h *LambdaHandlers) GetPolicy(c *gin.Context) {
-	policyID := c.Param("policy_id")
+	principalID := c.Param("principal_id")
 	h.handlePolicyOperation(c, "get", &dto.PolicyEvent{
-		PolicyID: policyID,
+		PrincipalID: principalID,
 	})
 }
 

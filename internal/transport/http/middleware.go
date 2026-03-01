@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // ZapMiddleware is a Gin middleware that logs requests using Zap and OpenTelemetry
@@ -62,56 +61,53 @@ func ZapMiddleware(serviceName string) gin.HandlerFunc {
 	}
 }
 
-// AuthMiddleware extracts the user ID from the JWT token or Access Key headers.
-// It uses ApiKeyResolver to lazily load and verify Access Keys via NATS if not cached.
-func AuthMiddleware(resolver *auth.ApiKeyResolver) gin.HandlerFunc {
+// UserContextMiddleware extracts the user ID from headers.
+// It prioritizes X-User-Id (from API Gateway), then unverified JWT,
+// and finally resolves it from X-Access-Key-Id if provided.
+// Authentication is assumed to be handled upstream by the API Gateway.
+func UserContextMiddleware(resolver *auth.ApiKeyResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
 		userID := ""
 
-		if authHeader != "" {
-			// Header format: Bearer <token>
-			tokenString := authHeader
-			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-				tokenString = authHeader[7:]
-			}
+		// 1. High priority: User ID passed directly by API Gateway
+		if xUserID := c.GetHeader("X-User-Id"); xUserID != "" {
+			userID = xUserID
+		}
 
-			// Parse without verification as requested (authentication is handled elsewhere)
-			parser := jwt.NewParser()
-			token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
-			if err == nil {
-				if claims, ok := token.Claims.(jwt.MapClaims); ok {
-					// Check "userId" or "sub" for the identifier
-					if id, exists := claims["userId"]; exists {
-						userID = fmt.Sprintf("%v", id)
-					} else if sub, exists := claims["sub"]; exists {
-						userID = fmt.Sprintf("%v", sub)
+		// 2. Medium priority: Extract from Authorization header (unverified JWT)
+		if userID == "" {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				tokenString := authHeader
+				if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+					tokenString = authHeader[7:]
+				}
+
+				parser := jwt.NewParser()
+				token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
+				if err == nil {
+					if claims, ok := token.Claims.(jwt.MapClaims); ok {
+						if id, exists := claims["userId"]; exists {
+							userID = fmt.Sprintf("%v", id)
+						} else if sub, exists := claims["sub"]; exists {
+							userID = fmt.Sprintf("%v", sub)
+						}
 					}
 				}
 			}
 		}
 
-		// Check for Access Key authentication headers if JWT didn't resolve a userID
+		// 3. Low priority: Resolve from Access Key ID
 		if userID == "" {
 			accessKeyID := c.GetHeader("X-Access-Key-Id")
-			secretKey := c.GetHeader("X-Secret-Access-Key")
-
-			if accessKeyID != "" && secretKey != "" {
-				// Resolve the key using the hybrid approach (Local DB -> NATS)
+			if accessKeyID != "" {
+				// Resolve the key to find the owner's userID
+				// We do NOT perform secret validation here as it's assumed to be done by Gateway
 				key, err := resolver.Resolve(c.Request.Context(), accessKeyID)
 				if err != nil {
-					logger.ForContext(c.Request.Context()).Warn("Failed to resolve API Key", zap.String("id", accessKeyID), zap.Error(err))
+					logger.ForContext(c.Request.Context()).Warn("Failed to resolve identity from Access Key", zap.String("id", accessKeyID), zap.Error(err))
 				} else if key != nil {
-					// Perform BCrypt validation locally
-					if err := bcrypt.CompareHashAndPassword([]byte(key.SecretKeyHash), []byte(secretKey)); err != nil {
-						logger.ForContext(c.Request.Context()).Warn("API Key secret mismatch", zap.String("id", accessKeyID))
-					} else if !key.Enabled {
-						logger.ForContext(c.Request.Context()).Warn("API Key is disabled", zap.String("id", accessKeyID))
-					} else {
-						// Success! Set the real userID from the key owner
-						userID = key.UserID
-						logger.ForContext(c.Request.Context()).Debug("Authenticated via Access Key", zap.String("userID", userID))
-					}
+					userID = key.UserID
 				}
 			}
 		}

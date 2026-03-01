@@ -1,0 +1,33 @@
+### Create Policy
+POST http://localhost:8053/api/v1/lambda/policies
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
+Content-Type: application/json
+
+{
+  "account_id": "acc-12m3",
+  "principal_id": "lambda-123",
+  "resource_type": "s3",
+  "resource_id": "bucket/images/*",
+  "action": "DeleteObject"
+}
+
+### Update Policy
+PUT http://localhost:8053/api/v1/lambda/policies/5b99a509-7457-4da1-a2c1-2b8314a0bc0d
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
+Content-Type: application/json
+
+{
+  "account_id": "acc-123",
+  "principal_id": "lambda-123",
+  "resource_type": "s3",
+  "resource_id": "bucket/images/*",
+  "action": "GetObject"
+}
+
+### Get Policy
+GET http://localhost:8053/api/v1/lambda/policies/lambda-123
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
+
+### Delete Policy
+DELETE http://localhost:8053/api/v1/lambda/policies/pol-123
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.

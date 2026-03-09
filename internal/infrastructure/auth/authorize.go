@@ -99,3 +99,67 @@ func (a *Authorizer) Authorize(ctx context.Context, accountID, principalID, reso
 	l.Warn("Authorization denied", zap.String("reason", reason))
 	return false, errors.New(reason)
 }
+
+// Token generation structs
+type instanceTokenRequest struct {
+	InstanceID string `json:"instance_id"`
+	UserID     string `json:"user_id"`
+}
+
+type instanceTokenResponse struct {
+	Token string `json:"token"`
+	Error string `json:"error,omitempty"`
+}
+
+// GenerateMetricsToken requests the IAM service for a scoped JWT token for the metrics agent.
+func (a *Authorizer) GenerateMetricsToken(ctx context.Context, userID, functionID string) (string, error) {
+	reqID := uuid.New().String()
+	l := logger.ForContext(ctx).With(
+		zap.String("request_id", reqID),
+		zap.String("user_id", userID),
+		zap.String("function_id", functionID),
+	)
+
+	req := instanceTokenRequest{
+		InstanceID: functionID,
+		UserID:     userID,
+	}
+
+	reqData, err := json.Marshal(req)
+	if err != nil {
+		l.Error("Failed to marshal instance token request", zap.Error(err))
+		return "", fmt.Errorf("failed to marshal instance token request: %w", err)
+	}
+
+	subject := fmt.Sprintf("%s.iam.v1.token.generate", a.Env)
+	if a.Env == "" {
+		subject = "iam.v1.token.generate"
+	}
+
+	l.Debug("Requesting metrics token from IAM", zap.String("subject", subject))
+
+	msg, err := a.Nats.Request(ctx, subject, reqData, 5*time.Second)
+	if err != nil {
+		l.Error("IAM token request failed", zap.Error(err))
+		return "", fmt.Errorf("NATS request failed: %w", err)
+	}
+
+	var resp instanceTokenResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		l.Error("Failed to unmarshal instance token response", zap.Error(err))
+		return "", fmt.Errorf("failed to unmarshal instance token response: %w", err)
+	}
+
+	if resp.Error != "" {
+		l.Error("IAM service returned error on token generation", zap.String("error", resp.Error))
+		return "", fmt.Errorf("IAM service error: %s", resp.Error)
+	}
+
+	if resp.Token == "" {
+		l.Error("IAM service returned an empty token")
+		return "", fmt.Errorf("IAM service returned an empty token")
+	}
+
+	l.Info("Successfully generated metrics token")
+	return resp.Token, nil
+}

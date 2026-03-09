@@ -13,6 +13,7 @@ import (
 	"lambda/internal/logger"
 	"lambda/internal/telemetry"
 	transportHTTP "lambda/internal/transport/http"
+	transportNATS "lambda/internal/transport/nats"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
@@ -130,6 +131,11 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	transportHTTP.SetupRoutes(router, handlers)
+
+	// 5.5 Start NATS listeners
+	if err := transportNATS.StartScaleEventServer(natsClient, db); err != nil {
+		logger.Log.Error("Failed to start scale event listener", zap.Error(err))
+	}
 
 	// 6. Start server
 	logger.Log.Info("Lambda Service starting", zap.String("port", cfg.Server.Port))

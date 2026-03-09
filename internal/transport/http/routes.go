@@ -36,6 +36,15 @@ func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers) {
 		policies.GET("/:principal_id", handlers.GetPolicy)
 	}
 
+	// ── Lambda Scaling Policy routes ───────────────────────────────────────────
+	scalingPolicies := v1.Group("")
+	{
+		scalingPolicies.GET("/policies", handlers.ListLambdaScalingPolicies)
+		scalingPolicies.POST("/:functionId/policies", handlers.CreateLambdaScalingPolicy)
+		scalingPolicies.PUT("/:functionId/policies", handlers.UpdateLambdaScalingPolicy)
+		scalingPolicies.DELETE("/:functionId/policies", handlers.DeleteLambdaScalingPolicy)
+	}
+
 	// ── Public documentation endpoints (no auth required) ─────────────────────
 	v1.GET("/docs", handlers.GetManifest)
 	v1.GET("/docs/:slug", handlers.GetDocBySlug)

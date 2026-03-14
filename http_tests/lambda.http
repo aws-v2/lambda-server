@@ -1,5 +1,5 @@
 ### Register Go Function
-POST http://localhost:8053/api/v1/lambda/functions
+POST http://localhost:8089/api/v1/lambda/functions
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: multipart/form-data; boundary=boundary
 
@@ -35,7 +35,7 @@ Content-Type: application/octet-stream
 --boundary--
 
 ### Invoke Go Function
-POST http://localhost:8053/api/v1/lambda/invoke
+POST http://localhost:8089/api/v1/lambda/invoke
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: application/json
 
@@ -47,7 +47,7 @@ Content-Type: application/json
 }
 
 ### Register Node.js Function
-POST http://localhost:8053/api/v1/lambda/functions
+POST http://localhost:8089/api/v1/lambda/functions
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: multipart/form-data; boundary=boundary
 
@@ -83,7 +83,7 @@ Content-Type: application/javascript
 --boundary--
 
 ### Invoke Node.js Function
-POST http://localhost:8053/api/v1/lambda/invoke
+POST http://localhost:8089/api/v1/lambda/invoke
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: application/json
 
@@ -95,7 +95,7 @@ Content-Type: application/json
 }
 
 ### Register Python Function
-POST http://localhost:8053/api/v1/lambda/functions
+POST http://localhost:8089/api/v1/lambda/functions
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: multipart/form-data; boundary=boundary
 
@@ -131,7 +131,7 @@ Content-Type: text/x-python
 --boundary--
 
 ### Invoke Python Function
-POST http://localhost:8053/api/v1/lambda/invoke
+POST http://localhost:8089/api/v1/lambda/invoke
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: application/json
 
@@ -143,7 +143,7 @@ Content-Type: application/json
 }
 
 ### Register Java JAR Function
-POST http://localhost:8053/api/v1/lambda/functions
+POST http://localhost:8089/api/v1/lambda/functions
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: multipart/form-data; boundary=boundary
 
@@ -179,7 +179,7 @@ Content-Type: application/java-archive
 --boundary--
 
 ### Invoke Java Function
-POST http://localhost:8053/api/v1/lambda/invoke
+POST http://localhost:8089/api/v1/lambda/invoke
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: application/json
 
@@ -191,7 +191,7 @@ Content-Type: application/json
 }
 
 ### Register Docker Image Function
-POST http://localhost:8053/api/v1/lambda/functions
+POST http://localhost:8089/api/v1/lambda/functions
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: multipart/form-data; boundary=boundary
 
@@ -222,7 +222,7 @@ Content-Disposition: form-data; name="resources.memory"
 --boundary--
 
 ### Invoke Docker Image Function
-POST http://localhost:8053/api/v1/lambda/invoke
+POST http://localhost:8089/api/v1/lambda/invoke
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: application/json
 
@@ -234,7 +234,7 @@ Content-Type: application/json
 ### Register Node.js Zip Function
 ### Note: This requires a zip file named 'function.zip' in http_tests/
 ### Containing 'index.js' and 'helper.js'
-POST http://localhost:8053/api/v1/lambda/functions
+POST http://localhost:8089/api/v1/lambda/functions
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: multipart/form-data; boundary=boundary
 
@@ -270,7 +270,7 @@ Content-Type: application/zip
 --boundary--
 
 ### Invoke Node.js Zip Function
-POST http://localhost:8053/api/v1/lambda/invoke
+POST http://localhost:8089/api/v1/lambda/invoke
 Authorization: Bearer eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJ1c2VySWQiOiJmN2I4Y2FkZC05MmNiLTQ4MzAtYTU2NS1hMWM5MDM1OTdmYzYiLCJpYXQiOjE3MTE5OTY4MDB9.
 Content-Type: application/json
 
@@ -285,37 +285,37 @@ Content-Type: application/json
 
 
 ### Get Lambda Docs Manifest
-GET http://localhost:8053/api/v1/lambda/docs
+GET http://localhost:8089/api/v1/lambda/docs
 
 ### Get Lambda Doc by Slug: lambda-overview
-GET http://localhost:8053/api/v1/lambda/docs/lambda-overview
+GET http://localhost:8089/api/v1/lambda/docs/lambda-overview
 
 ### Get Lambda Doc by Slug: lambda-quickstart
-GET http://localhost:8053/api/v1/lambda/docs/lambda-quickstart
+GET http://localhost:8089/api/v1/lambda/docs/lambda-quickstart
 
 ### Get Lambda Doc by Slug: lambda-lifecycle
-GET http://localhost:8053/api/v1/lambda/docs/lambda-lifecycle
+GET http://localhost:8089/api/v1/lambda/docs/lambda-lifecycle
 
 ### Get Lambda Doc by Slug: lambda-runtimes
-GET http://localhost:8053/api/v1/lambda/docs/lambda-runtimes
+GET http://localhost:8089/api/v1/lambda/docs/lambda-runtimes
 
 ### Get Lambda Doc by Slug: lambda-env-vars
-GET http://localhost:8053/api/v1/lambda/docs/lambda-env-vars
+GET http://localhost:8089/api/v1/lambda/docs/lambda-env-vars
 
 ### Get Lambda Doc by Slug: lambda-layers
-GET http://localhost:8053/api/v1/lambda/docs/lambda-layers
+GET http://localhost:8089/api/v1/lambda/docs/lambda-layers
 
 ### Get Lambda Doc by Slug: lambda-triggers
-GET http://localhost:8053/api/v1/lambda/docs/lambda-triggers
+GET http://localhost:8089/api/v1/lambda/docs/lambda-triggers
 
 ### Get Lambda Doc by Slug: lambda-event-sources
-GET http://localhost:8053/api/v1/lambda/docs/lambda-event-sources
+GET http://localhost:8089/api/v1/lambda/docs/lambda-event-sources
 
 ### Get Lambda Doc by Slug: lambda-monitoring
-GET http://localhost:8053/api/v1/lambda/docs/lambda-monitoring
+GET http://localhost:8089/api/v1/lambda/docs/lambda-monitoring
 
 ### Get Lambda Doc by Slug: lambda-limits
-GET http://localhost:8053/api/v1/lambda/docs/lambda-limits
+GET http://localhost:8089/api/v1/lambda/docs/lambda-limits
 
 ### Get Lambda Doc - Not Found (404)
-GET http://localhost:8053/api/v1/lambda/docs/does-not-exist
+GET http://localhost:8089/api/v1/lambda/docs/does-not-exist

@@ -20,4 +20,4 @@ docker-build:
 	docker build -t $(BINARY_NAME) .
 
 docker-run:
-	docker run -p 8053:8053 $(BINARY_NAME)
+	docker run -p 8089:8089 $(BINARY_NAME)

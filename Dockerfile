@@ -40,7 +40,7 @@ RUN mkdir -p storage && chown -R appuser:appuser /app
 USER appuser
 
 # Expose the application port
-EXPOSE 8053
+EXPOSE 8089
 
 # Run the binary
 ENTRYPOINT ["./main"]

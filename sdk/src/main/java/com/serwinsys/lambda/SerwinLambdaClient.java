@@ -24,11 +24,11 @@ import java.util.Map;
  * </ul>
  */
 public class SerwinLambdaClient {
-    public static final String DEFAULT_BASE_URL = "http://localhost:8053";
+    public static final String DEFAULT_BASE_URL = "http://localhost:8089";
     private final HttpExecutor executor;
 
     /**
-     * Creates a client using the default base URL (http://localhost:8053)
+     * Creates a client using the default base URL (http://localhost:8089)
      * and the provided credentials.
      */
     public SerwinLambdaClient(SerwinCredentials credentials) {
@@ -36,7 +36,7 @@ public class SerwinLambdaClient {
     }
 
     /**
-     * Creates a client using the default base URL (http://localhost:8053)
+     * Creates a client using the default base URL (http://localhost:8089)
      * and the provided credentials provider.
      */
     public SerwinLambdaClient(CredentialsProvider provider) {
@@ -44,7 +44,7 @@ public class SerwinLambdaClient {
     }
 
     /**
-     * Creates a client using the default base URL (http://localhost:8053),
+     * Creates a client using the default base URL (http://localhost:8089),
      * the provided credentials, and a custom timeout.
      */
     public SerwinLambdaClient(SerwinCredentials credentials, Duration timeout) {

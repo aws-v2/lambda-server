@@ -41,10 +41,10 @@
 [GIN-debug] PUT    /api/v1/lambda/policies/:policy_id --> lambda/internal/transport/http.(*LambdaHandlers).UpdatePolicy-fm (4 handlers)
 [GIN-debug] DELETE /api/v1/lambda/policies/:policy_id --> lambda/internal/transport/http.(*LambdaHandlers).DeletePolicy-fm (4 handlers)
 [GIN-debug] GET    /api/v1/lambda/policies/:policy_id --> lambda/internal/transport/http.(*LambdaHandlers).GetPolicy-fm (4 handlers)
-{"level":"info","ts":1772266187.6150448,"caller":"api/main.go:135","msg":"Lambda Service starting","port":"8053"}
+{"level":"info","ts":1772266187.6150448,"caller":"api/main.go:135","msg":"Lambda Service starting","port":"8089"}
 [GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
 Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
-[GIN-debug] Listening and serving HTTP on :8053
+[GIN-debug] Listening and serving HTTP on :8089
 {"level":"info","ts":1772266203.671561,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"7fb17e09-06e6-456c-87d6-baf848056f01","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"curl/7.81.0","latency":0.00000858}
 {"level":"info","ts":1772266370.605708,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"914f5346-2fca-451d-aba5-4a1aa9673b1a","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"vscode-restclient","latency":0.000010958}
 {"level":"info","ts":1772266373.5985508,"caller":"http/middleware.go:51","msg":"/api/v1/lambda/policies","trace_id":"627b30d0-5e0b-42c2-9bf8-5606571298bc","status":500,"method":"POST","path":"/api/v1/lambda/policies","query":"","ip":"127.0.0.1","user-agent":"vscode-restclient","latency":0.000011743}

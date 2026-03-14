@@ -80,7 +80,7 @@ func Load() (*Config, error) {
 			Password: getEnv("NATS_PASSWORD", ""),
 		},
 		Server: ServerConfig{
-			Port:        getEnv("PORT", "8053"),
+			Port:        getEnv("PORT", "8089"),
 			ServiceName: getEnv("SERVICE_NAME", "lambda-service"),
 			StoragePath: getEnv("CODE_STORAGE_PATH", "./storage"),
 			Region:      getEnv("AWS_REGION", "eu-north-1"),

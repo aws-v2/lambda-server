@@ -34,9 +34,9 @@ func GetEurekaConfig() *EurekaConfig {
 		AppName:           getEnv("EUREKA_APP_NAME", "LAMBDA-SERVICE"),
 		HostName:          getEnv("EUREKA_HOSTNAME", "localhost"),
 		IPAddr:            getEnv("EUREKA_IP_ADDR", "127.0.0.1"),
-		Port:              getEnvInt("SERVER_PORT", 8053),
+		Port:              getEnvInt("SERVER_PORT", 8089),
 		VipAddress:        getEnv("EUREKA_VIP_ADDRESS", "lambda-service"),
-		InstanceID:        getEnv("EUREKA_INSTANCE_ID", "lambda-service:8053"),
+		InstanceID:        getEnv("EUREKA_INSTANCE_ID", "lambda-service:8089"),
 		HeartbeatInterval: getEnvDuration("EUREKA_HEARTBEAT_INTERVAL", 30*time.Second),
 	}
 }

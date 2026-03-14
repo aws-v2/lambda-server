@@ -148,7 +148,7 @@ func (h *LambdaHandlers) handleLambdaScalingPolicyOperation(c *gin.Context, acti
 	publishSubject := fmt.Sprintf("%s.lambda.v1.scaling_policy.%s", env, action)
 
 
-	fmt.Println("CreateLambdaScalingPolicy---------d-------%s----", publishSubject)
+	fmt.Printf("CreateLambdaScalingPolicy---------d-------%s----\n", publishSubject)
 
 
 	l := logger.ForContext(c.Request.Context()).With(

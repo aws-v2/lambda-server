@@ -136,7 +136,7 @@ On every function invocation, an event is published to `lambda.events.invoked` w
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| PORT | 8083 | Server port |
+| PORT | 8088 | Server port |
 | DB_HOST | localhost | PostgreSQL host |
 | DB_PORT | 5432 | PostgreSQL port |
 | DB_NAME | lambda_db | Database name |

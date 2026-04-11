@@ -55,7 +55,7 @@ jobs:
               -e DB_HOST=postgres-staging \
               -e DB_PORT=5432 \
               -e DB_USER=lambda-server \
-              -e DB_PASSWORD=${{ secrets.STAGING_DB_PASSWORD }} \
+              -e DB_PASSWORD=staging-secret \
               -e DB_NAME=lambda_db \
               -e NATS_URL=nats://nats-staging:4222 \
               -e NATS_USER=auth-server \

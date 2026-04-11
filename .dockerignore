@@ -1,0 +1,14 @@
+.git
+.github
+Dockerfile
+Makefile
+README.md
+docs
+http_tests
+lambda-code
+lambda.log
+roadmap.md
+*.db
+.env
+.env-*
+vendor/

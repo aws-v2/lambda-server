@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"time"
+	"fmt"
 
 	"lambda/internal/config"
 	"lambda/internal/infrastructure/auth"
@@ -24,7 +25,6 @@ import (
 func main() {
 	logger.Init()
 	defer logger.Log.Sync()
-	logger.Log.Info("Starting Modular Lambda Service...")
 
 	// 0. Initialize Profile-based Configuration
 	config.InitProfiles()
@@ -35,14 +35,34 @@ func main() {
 		logger.Log.Fatal("Failed to load configuration", zap.Error(err))
 	}
 
+	logger.Log.Info("Starting Modular Lambda Service", 
+		zap.String("service", cfg.Server.ServiceName),
+		zap.String("profile", cfg.Profile),
+		zap.String("region", cfg.Server.Region),
+	)
+
+	// Step 2: Reachability & Diagnostics Pre-checks
+	// 1. NATS Reachability Check
+	if err := config.CheckReachability(cfg.NATS.URL, 5, 2*time.Second); err != nil {
+		logger.Log.Fatal("NATS is unreachable", zap.Error(err))
+	}
+
+	// 2. Database Reachability Check
+	dbAddr := fmt.Sprintf("%s:%d", cfg.DB.Host, cfg.DB.Port)
+	if err := config.CheckReachability(dbAddr, 5, 2*time.Second); err != nil {
+		logger.Log.Fatal("Database is unreachable", zap.Error(err))
+	}
+
 	// Eureka Configuration
 	eurekaConfig := discovery.GetEurekaConfig()
 	eurekaConfig.ServerURL = cfg.Eureka.ServerURL
 
-	if err := discovery.RegisterWithEureka(eurekaConfig); err != nil {
-		logger.Log.Error("Failed to register with Eureka", zap.Error(err))
-	} else {
-		go discovery.SendHeartbeat(eurekaConfig)
+	if eurekaConfig.ServerURL != "" {
+		if err := discovery.RegisterWithEureka(eurekaConfig); err != nil {
+			logger.Log.Error("Failed to register with Eureka", zap.Error(err))
+		} else {
+			go discovery.SendHeartbeat(eurekaConfig)
+		}
 	}
 
 	// 0.2 Initialize Telemetry (OTel + Prometheus)
@@ -80,33 +100,12 @@ func main() {
 		ConnMaxIdleTime: cfg.DB.ConnMaxIdleTime,
 	}
 
-	var db *database.DB
-	maxRetries := 4
-
-	for i := 0; i < maxRetries; i++ {
-		logger.Log.Info("Attempting to connect to PostgreSQL...", zap.Int("attempt", i+1))
-		db, err = database.Connect(dbConfig)
-		if err == nil {
-			break
-		}
-		logger.Log.Warn("Failed to connect to PostgreSQL", zap.Int("attempt", i+1), zap.Error(err))
-		if i < maxRetries-1 {
-			time.Sleep(2 * time.Second)
-		}
-	}
-
+	db, err := database.Connect(dbConfig)
 	if err != nil {
-		logger.Log.Warn("Could not connect to PostgreSQL after retries, falling back to SQLite")
-		sqlitePath := getEnv("SQLITE_PATH", "lambda.db")
-		db, err = database.ConnectSQLite(sqlitePath)
-		if err != nil {
-			logger.Log.Fatal("Failed to connect to SQLite fallback", zap.Error(err))
-		}
-		logger.Log.Info("Connected to SQLite fallback", zap.String("path", sqlitePath))
-	} else {
-		logger.Log.Info("Successfully connected to PostgreSQL")
+		logger.Log.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
 	}
 	defer db.Close()
+	logger.Log.Info("Successfully connected to PostgreSQL")
 
 	migrationsPath := getEnv("MIGRATIONS_PATH", "internal/infrastructure/migrations")
 	if err := db.RunMigrations(migrationsPath); err != nil {

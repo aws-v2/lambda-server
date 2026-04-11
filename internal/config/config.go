@@ -9,6 +9,8 @@ import (
 
 	"lambda/internal/logger"
 	"strconv"
+	"net"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -65,9 +67,9 @@ func Load() (*Config, error) {
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "root"),
-			Password:        getEnv("DB_PASSWORD", "root"),
-			Database:        getEnv("DB_NAME", "lambda_db"),
+			User:            getEnv("DB_USER", ""),
+			Password:        getEnv("DB_PASSWORD", ""),
+			Database:        getEnv("DB_NAME", ""),
 			SSLMode:         getEnv("DB_SSLMODE", "disable"),
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
@@ -86,12 +88,52 @@ func Load() (*Config, error) {
 			Region:      getEnv("AWS_REGION", "eu-north-1"),
 		},
 		Eureka: EurekaConfig{
-			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),
+			ServerURL: getEnv("EUREKA_SERVER_URL", ""),
 		},
-		Profile: getEnv("APP_PROFILE", "DEV"),
+		Profile: getEnv("APP_PROFILE", "dev"),
 	}
 
 	return cfg, nil
+}
+
+// CheckReachability performs a TCP reachability check on a target address with retries
+func CheckReachability(target string, maxRetries int, delay time.Duration) error {
+	// If target is a URL, extract host and port
+	address := target
+	if strings.HasPrefix(target, "nats://") {
+		address = strings.TrimPrefix(target, "nats://")
+	} else if strings.HasPrefix(target, "http://") {
+		address = strings.TrimPrefix(target, "http://")
+		if idx := strings.Index(address, "/"); idx != -1 {
+			address = address[:idx]
+		}
+	} else if strings.HasPrefix(target, "https://") {
+		address = strings.TrimPrefix(target, "https://")
+		if idx := strings.Index(address, "/"); idx != -1 {
+			address = address[:idx]
+		}
+	}
+
+	var conn net.Conn
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		logger.Log.Info("Checking TCP reachability...", zap.String("target", address), zap.Int("attempt", i+1))
+		conn, err = net.DialTimeout("tcp", address, 2*time.Second)
+		if err == nil {
+			conn.Close()
+			logger.Log.Info("Target is reachable", zap.String("target", address))
+			return nil
+		}
+
+		logger.Log.Warn("Target unreachable", zap.String("target", address), zap.Error(err), zap.Int("attempt", i+1))
+		if i < maxRetries-1 {
+			time.Sleep(delay)
+		}
+	}
+
+	logger.Log.Error("FATAL: Service reachability check failed", zap.String("target", address), zap.Int("total_attempts", maxRetries))
+	return fmt.Errorf("failed to reach %s after %d attempts: %w", address, maxRetries, err)
 }
 
 func getEnv(key, defaultValue string) string {

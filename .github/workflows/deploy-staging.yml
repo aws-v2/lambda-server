@@ -60,6 +60,8 @@ jobs:
               -e NATS_URL=nats://nats-staging:4222 \
               -e NATS_USER=auth-server \
               -e NATS_PASSWORD=auth-secret \
+              -e EUREKA_HOSTNAME=lambda-service-staging \
+              -e EUREKA_IP_ADDR= 8761\
               -e EUREKA_SERVER_URL=http://discovery-server-staging:8761/eureka \
               -e SERVICE_NAME=lambda-service \
               -e AWS_REGION=eu-north-1 \

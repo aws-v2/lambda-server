@@ -88,7 +88,7 @@ func Load() (*Config, error) {
 			Region:      getEnv("AWS_REGION", "eu-north-1"),
 		},
 		Eureka: EurekaConfig{
-			ServerURL: getEnv("EUREKA_SERVER_URL", ""),
+			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),
 		},
 		Profile: getEnv("APP_PROFILE", "dev"),
 	}

@@ -54,13 +54,13 @@ jobs:
               -e APP_PROFILE=staging \
               -e DB_HOST=postgres-staging \
               -e DB_PORT=5432 \
-              -e DB_USER=lambda-server \
-              -e DB_PASSWORD=staging-secret \
+              -e DB_USER=root \
+              -e DB_PASSWORD=root \
               -e DB_NAME=lambda_db \
               -e NATS_URL=nats://nats-staging:4222 \
               -e NATS_USER=auth-server \
               -e NATS_PASSWORD=auth-secret \
-              -e EUREKA_SERVER_URL=http://eureka-staging:8761/eureka \
+              -e EUREKA_SERVER_URL=http://discovery-server-staging:8761/eureka \
               -e SERVICE_NAME=lambda-service \
               -e AWS_REGION=eu-north-1 \
               -e PORT=8089 \

@@ -1,10 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"time"
-	"fmt"
 
+	"lambda/internal/application"
 	"lambda/internal/config"
 	"lambda/internal/infrastructure/auth"
 	"lambda/internal/infrastructure/database"
@@ -113,20 +114,24 @@ func main() {
 	}
 	logger.Log.Info("Database migrations completed")
 
-	// 3. Initialize Infrastructure
+// 3. Initialize Infrastructure
 	natsClient := event.NewNatsClient(nc)
 	storagePath := getEnv("CODE_STORAGE_PATH", "./storage")
 	codeStorage := storage.NewStorage(storagePath)
 
 	// 4. Initialize Handlers and Auth Resolver
 	resolver := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
-	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region)
+
+	docsBasePath := getEnv("DOCS_PATH", "./docs")
+	docsService := application.NewDocsService(docsBasePath)
+	docsHandler := transportHTTP.NewDocsHandler(docsService)
+
+	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region,docsHandler)
 
 	// 5. Setup Gin router
 	router := gin.New()
 	router.Use(transportHTTP.ZapMiddleware(cfg.Server.ServiceName), gin.Recovery())
 
-	// Expose metrics for Prometheus
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	transportHTTP.SetupRoutes(router, handlers)
@@ -141,6 +146,7 @@ func main() {
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		logger.Log.Fatal("Failed to start server", zap.Error(err))
 	}
+
 }
 
 // Helpers

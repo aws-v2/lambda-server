@@ -33,15 +33,16 @@ type LambdaHandlers struct {
 	Storage  *storage.Storage
 	Resolver *auth.ApiKeyResolver
 	Region   string
+	Docs     *DocsHandler  // ← this line must be present
 }
-
-func NewLambdaHandlers(db *database.DB, nats *event.NatsClient, storage *storage.Storage, resolver *auth.ApiKeyResolver, region string) *LambdaHandlers {
+func NewLambdaHandlers(db *database.DB, nats *event.NatsClient, storage *storage.Storage, resolver *auth.ApiKeyResolver, region string, docsHandler *DocsHandler) *LambdaHandlers {
 	return &LambdaHandlers{
 		DB:       db,
 		Nats:     nats,
 		Storage:  storage,
 		Resolver: resolver,
 		Region:   region,
+		Docs:     docsHandler,  // ← wire it here
 	}
 }
 

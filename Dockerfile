@@ -26,7 +26,7 @@ WORKDIR /app
 
 # Install certificates
 RUN apk --no-cache add ca-certificates
-
+RUN mkdir -p /app/docs
 # Copy the binary from the builder stage
 COPY --from=builder /app/main .
 

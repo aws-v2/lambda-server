@@ -35,7 +35,8 @@ COPY --from=builder /app/internal/infrastructure/migrations ./internal/infrastru
 
 # Copy docs from builder stage
 COPY --from=builder /app/docs ./docs
-
+# Copy docs if they exist (won't fail if folder is missing)
+COPY --from=builder /app/docs* ./docs/
 # Create storage directory and set permissions
 RUN mkdir -p storage && chown -R appuser:appuser /app
 

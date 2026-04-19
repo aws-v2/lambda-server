@@ -33,6 +33,9 @@ COPY --from=builder /app/main .
 # Copy migrations so they are available for RunMigrations()
 COPY --from=builder /app/internal/infrastructure/migrations ./internal/infrastructure/migrations
 
+# Copy docs from builder stage
+COPY --from=builder /app/docs ./docs
+
 # Create storage directory and set permissions
 RUN mkdir -p storage && chown -R appuser:appuser /app
 

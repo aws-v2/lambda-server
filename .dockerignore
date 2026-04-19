@@ -3,7 +3,6 @@
 Dockerfile
 Makefile
 README.md
-docs
 http_tests
 lambda-code
 lambda.log

@@ -9,7 +9,7 @@ import (
 
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	"go.uber.org/zap"
 )
@@ -41,37 +41,75 @@ type resolveResponse struct {
 }
 
 func (r *ApiKeyResolver) Resolve(ctx context.Context, accessKeyID string) (*database.ApiKey, error) {
+	log := logger.WithContext(ctx)
+
 	// 1. Try local cache
 	key, err := r.db.GetApiKey(accessKeyID)
 	if err != nil {
+		log.Error("failed to get API key from cache",
+			zap.String(logger.F.Action,    "apikey.resolve"),
+			zap.String(logger.F.Domain,    "auth"),
+			zap.String(logger.F.ErrorKind, "cache_read_error"),
+			zap.String("access_key_id",    accessKeyID),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	if key != nil {
+		log.Info("API key resolved from cache",
+			zap.String(logger.F.Action, "apikey.resolve"),
+			zap.String(logger.F.Domain, "auth"),
+			zap.String("access_key_id", accessKeyID),
+		)
 		return key, nil
 	}
 
 	// 2. Fallback to NATS request-reply
-	logger.ForContext(ctx).Info("API Key not found in cache, resolving via NATS...", zap.String("id", accessKeyID))
+	log.Info("API key not found in cache, resolving via NATS",
+		zap.String(logger.F.Action, "apikey.resolve"),
+		zap.String(logger.F.Domain, "auth"),
+		zap.String("access_key_id", accessKeyID),
+	)
 
 	req := resolveRequest{AccessKeyID: accessKeyID}
 	data, _ := json.Marshal(req)
 
-	// Subject follows: <env>.<service>.<version>.<domain>.<action_type>
 	subject := fmt.Sprintf("%s.lambda.%s.apikey.resolve",
 		strings.ToLower(r.env),
 		strings.ToLower(r.version))
 
 	respData, err := r.natsClient.Request(ctx, subject, data, 2*time.Second)
 	if err != nil {
+		log.Error("failed to resolve API key via NATS",
+			zap.String(logger.F.Action,    "apikey.resolve"),
+			zap.String(logger.F.Domain,    "auth"),
+			zap.String(logger.F.ErrorKind, "nats_request_error"),
+			zap.String("subject",          subject),
+			zap.String("access_key_id",    accessKeyID),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to resolve API key via NATS: %w", err)
 	}
 
 	var resp resolveResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
+		log.Error("failed to decode auth-server response",
+			zap.String(logger.F.Action,    "apikey.resolve"),
+			zap.String(logger.F.Domain,    "auth"),
+			zap.String(logger.F.ErrorKind, "decode_error"),
+			zap.String("access_key_id",    accessKeyID),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to decode auth-server response: %w", err)
 	}
 
 	if resp.UserID == "" {
+		log.Warn("auth-server returned empty user ID",
+			zap.String(logger.F.Action,    "apikey.resolve"),
+			zap.String(logger.F.Domain,    "auth"),
+			zap.String(logger.F.ErrorKind, "invalid_response"),
+			zap.String("access_key_id",    accessKeyID),
+		)
 		return nil, fmt.Errorf("auth-server could not resolve API key: %s", accessKeyID)
 	}
 
@@ -85,8 +123,20 @@ func (r *ApiKeyResolver) Resolve(ctx context.Context, accessKeyID string) (*data
 	}
 
 	if err := r.db.SaveApiKey(newKey); err != nil {
-		logger.ForContext(ctx).Warn("Failed to cache resolved API key", zap.Error(err))
+		log.Warn("failed to cache resolved API key",
+			zap.String(logger.F.Action,    "apikey.resolve"),
+			zap.String(logger.F.Domain,    "auth"),
+			zap.String(logger.F.ErrorKind, "cache_write_error"),
+			zap.String("access_key_id",    accessKeyID),
+			zap.Error(err),
+		)
 	}
+
+	log.Info("API key resolved successfully via NATS",
+		zap.String(logger.F.Action, "apikey.resolve"),
+		zap.String(logger.F.Domain, "auth"),
+		zap.String("access_key_id", accessKeyID),
+	)
 
 	return &newKey, nil
 }

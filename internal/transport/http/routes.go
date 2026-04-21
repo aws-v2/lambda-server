@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers) {
+func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers,policyHandlers *PolicyLambdaHandlers) {
 	v1 := router.Group("/api/v1/lambda")
 	{
 		v1.POST("/invoke", handlers.Invoke)
@@ -36,10 +36,10 @@ func SetupRoutes(router *gin.Engine, handlers *LambdaHandlers) {
 
 	scalingPolicies := v1.Group("")
 	{
-		scalingPolicies.GET("/policies", handlers.ListLambdaScalingPolicies)
-		scalingPolicies.POST("/:functionId/policies", handlers.CreateLambdaScalingPolicy)
-		scalingPolicies.PUT("/:functionId/policies", handlers.UpdateLambdaScalingPolicy)
-		scalingPolicies.DELETE("/:functionId/policies", handlers.DeleteLambdaScalingPolicy)
+		scalingPolicies.GET("/policies", policyHandlers.ListLambdaScalingPolicies)
+		scalingPolicies.POST("/:functionId/policies", policyHandlers.CreateLambdaScalingPolicy)
+		scalingPolicies.PUT("/:functionId/policies", policyHandlers.UpdateLambdaScalingPolicy)
+		scalingPolicies.DELETE("/:functionId/policies", policyHandlers.DeleteLambdaScalingPolicy)
 	}
 
 	// Docs

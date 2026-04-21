@@ -29,6 +29,7 @@ type Config struct {
 
 	// Profiles
 	Profile string
+	NatsPrefix string
 }
 
 type DBConfig struct {
@@ -89,7 +90,7 @@ func Load() (*Config, error) {
 		Eureka: EurekaConfig{
 			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),
 		},
-		Profile: getEnv("APP_PROFILE", "dev"),
+		Profile: getEnv("APP_PROFILE", "dev.v1"),
 	}
 
 	return cfg, nil

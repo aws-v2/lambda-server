@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	"go.uber.org/zap"
 )

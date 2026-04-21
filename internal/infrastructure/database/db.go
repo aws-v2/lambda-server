@@ -55,13 +55,13 @@ type ResourceDetails struct {
 }
 
 type Function struct {
-	Name        string
-	ARN         string
-	UserID      string
-	Type        string
-	Image       string
-	Execution   ExecutionDetails
-	Resources   ResourceDetails
+	Name                   string
+	ARN                    string
+	UserID                 string
+	Type                   string
+	Image                  string
+	Execution              ExecutionDetails
+	Resources              ResourceDetails
 	Env                    map[string]string
 	TimeoutMS              int
 	Description            string
@@ -100,6 +100,10 @@ type ApiKey struct {
 type DB struct {
 	conn   *sql.DB
 	driver string
+}
+
+func (db *DB) Conn() *sql.DB {
+	return db.conn
 }
 
 func NewPostgresDB(cfg Config) (*sql.DB, error) {

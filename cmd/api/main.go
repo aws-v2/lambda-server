@@ -20,6 +20,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"lambda/internal/infrastructure/repository"
+
 	"go.uber.org/zap"
 )
 
@@ -149,6 +151,12 @@ func main() {
 
 	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region, docsHandler)
 
+
+	// policyRepo := repository.NewLambdaScalingPolicyRepository(db.conn)
+policyRepo := repository.NewLambdaScalingPolicyRepository(db.Conn())
+	policyService := application.NewLambdaScalingPolicyService(policyRepo)
+	policyHandlers := transportHTTP.NewPolicyLambdaHandlers(policyService)
+
 	// ── 8. Router ─────────────────────────────────────────────────────────
 	router := gin.New()
 	router.Use(
@@ -156,7 +164,7 @@ func main() {
 		gin.Recovery(),
 	)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	transportHTTP.SetupRoutes(router, handlers)
+	transportHTTP.SetupRoutes(router, handlers,policyHandlers)
 
 	// ── 9. NATS listeners ─────────────────────────────────────────────────
 	if err := transportNATS.StartScaleEventServer(natsClient, db); err != nil {

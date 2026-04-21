@@ -64,7 +64,7 @@ func (h *LambdaHandlers) GetPolicy(c *gin.Context) {
 	})
 }
 
-func (h *LambdaHandlers) handlePolicyOperation(c *gin.Context, action string, event *dto.PolicyEvent) {
+func (h *LambdaHandlers) handlePolicyOperation(c *gin.Context, op string, event *dto.PolicyEvent) {
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "dev"
@@ -73,25 +73,29 @@ func (h *LambdaHandlers) handlePolicyOperation(c *gin.Context, action string, ev
 	requestID := uuid.New().String()
 	event.RequestID = requestID
 
-	publishSubject := fmt.Sprintf("%s.lambda.v1.policy.%s", env, action)
-	responseSubject := fmt.Sprintf("%s.iam.v1.policy.*", env)
+	publishSubject  := fmt.Sprintf("%s.lambda.policy.%s", env, op)
+	responseSubject := fmt.Sprintf("%s.iam.policy.*", env)
 
-	l := logger.ForContext(c.Request.Context()).With(
-		zap.String("action", action),
-		zap.String("request_id", requestID),
-		zap.String("publish_subject", publishSubject),
+	// Build a request-scoped logger: picks up trace/request IDs from context
+	// if the Gin middleware injected them, otherwise falls back to the handler logger.
+	log := logger.WithContext(c.Request.Context()).With(
+		zap.String(logger.F.Domain,    "policy"),
+		zap.String(logger.F.Action,    "policy."+op),
+		zap.String(logger.F.RequestID, requestID),
+		zap.String("publish_subject",  publishSubject),
 	)
 
-	// Channel to receive the response
 	respChan := make(chan *dto.PolicyEvent, 1)
 
-	// Subscribe to IAM responses
 	sub, err := h.Nats.Subscribe(responseSubject, func(m *github_nats.Msg) {
 		var resp dto.PolicyEvent
 		if err := json.Unmarshal(m.Data, &resp); err != nil {
+			log.Warn("failed to unmarshal IAM response",
+				zap.String(logger.F.ErrorKind, "iam_response_parse_error"),
+				zap.Error(err),
+			)
 			return
 		}
-
 		if resp.RequestID == requestID {
 			select {
 			case respChan <- &resp:
@@ -100,33 +104,52 @@ func (h *LambdaHandlers) handlePolicyOperation(c *gin.Context, action string, ev
 		}
 	})
 	if err != nil {
-		l.Error("Failed to subscribe to response subject", zap.Error(err))
+		log.Error("failed to subscribe to response subject",
+			zap.String(logger.F.ErrorKind, "nats_subscribe_error"),
+			zap.String("response_subject", responseSubject),
+			zap.Error(err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal communication error"})
 		return
 	}
 	defer sub.Unsubscribe()
 
-	// Publish the request
 	data, _ := json.Marshal(event)
-	err = h.Nats.Conn.Publish(publishSubject, data)
-	if err != nil {
-		l.Error("Failed to publish policy event", zap.Error(err))
+	if err := h.Nats.Conn.Publish(publishSubject, data); err != nil {
+		log.Error("failed to publish policy event",
+			zap.String(logger.F.ErrorKind, "nats_publish_error"),
+			zap.String("publish_subject", publishSubject),
+			zap.Error(err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send request to IAM"})
 		return
 	}
 
-	// Wait for response or timeout
+	log.Debug("policy event published, awaiting IAM response")
+
 	select {
 	case resp := <-respChan:
 		if resp.Error != "" {
+			log.Warn("IAM returned error",
+				zap.String(logger.F.ErrorKind, "iam_policy_error"),
+				zap.String("iam_error", resp.Error),
+			)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": resp.Error})
 		} else {
+			log.Info("policy operation succeeded")
 			c.JSON(http.StatusOK, resp)
 		}
+
 	case <-time.After(5 * time.Second):
-		l.Warn("IAM response timeout")
+		log.Warn("IAM response timeout",
+			zap.String(logger.F.ErrorKind, "iam_timeout"),
+			zap.Duration("timeout", 5*time.Second),
+		)
 		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "timeout waiting for IAM response"})
+
 	case <-c.Request.Context().Done():
-		l.Warn("Client disconnected")
+		log.Warn("client disconnected before IAM response",
+			zap.String(logger.F.ErrorKind, "client_disconnected"),
+		)
 	}
 }

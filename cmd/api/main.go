@@ -12,10 +12,10 @@ import (
 	"lambda/internal/infrastructure/discovery"
 	"lambda/internal/infrastructure/event"
 	"lambda/internal/infrastructure/storage"
-	"lambda/internal/logger"
-	"lambda/internal/telemetry"
 	transportHTTP "lambda/internal/transport/http"
 	transportNATS "lambda/internal/transport/nats"
+	"lambda/internal/utils/logger"
+	"lambda/internal/utils/telemetry"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
@@ -24,70 +24,87 @@ import (
 )
 
 func main() {
-	logger.Init()
-	defer logger.Log.Sync()
-
-	// 0. Initialize Profile-based Configuration
+	// ── 0. Configuration ──────────────────────────────────────────────────
 	config.InitProfiles()
 
-	// 0.1 Load Structured Configuration
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Log.Fatal("Failed to load configuration", zap.Error(err))
+		// Logger isn't ready yet — use stderr directly
+		fmt.Fprintf(os.Stderr, "FATAL: failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
 
-	logger.Log.Info("Starting Modular Lambda Service", 
-		zap.String("service", cfg.Server.ServiceName),
-		zap.String("profile", cfg.Profile),
-		zap.String("region", cfg.Server.Region),
+	// ── 1. Logger — must come right after config ──────────────────────────
+	// Profile drives format (dev=console, staging/prod=JSON) and level.
+	// Service name and region are baked into every JSON line for Kibana.
+	logger.Init(cfg.Server.ServiceName, cfg.Profile, cfg.Server.Region)
+	defer logger.Log.Sync() //nolint:errcheck
+
+	logger.Log.Info("service starting",
+		zap.String(logger.F.Service, cfg.Server.ServiceName),
+		zap.String(logger.F.Profile, cfg.Profile),
+		zap.String(logger.F.Region,  cfg.Server.Region),
 	)
 
-	// Step 2: Reachability & Diagnostics Pre-checks
-	// 1. NATS Reachability Check
+	// ── 2. Reachability checks ────────────────────────────────────────────
 	if err := config.CheckReachability(cfg.NATS.URL, 5, 2*time.Second); err != nil {
-		logger.Log.Fatal("NATS is unreachable", zap.Error(err))
+		logger.Log.Fatal("NATS unreachable",
+			zap.String(logger.F.ErrorKind, "nats_unreachable"),
+			zap.Error(err),
+		)
 	}
 
-	// 2. Database Reachability Check
 	dbAddr := fmt.Sprintf("%s:%d", cfg.DB.Host, cfg.DB.Port)
 	if err := config.CheckReachability(dbAddr, 5, 2*time.Second); err != nil {
-		logger.Log.Fatal("Database is unreachable", zap.Error(err))
+		logger.Log.Fatal("database unreachable",
+			zap.String(logger.F.ErrorKind, "db_unreachable"),
+			zap.Error(err),
+		)
 	}
 
-	// Eureka Configuration
+	// ── 3. Eureka registration ────────────────────────────────────────────
 	eurekaConfig := discovery.GetEurekaConfig()
 	eurekaConfig.ServerURL = cfg.Eureka.ServerURL
 
 	if eurekaConfig.ServerURL != "" {
 		if err := discovery.RegisterWithEureka(eurekaConfig); err != nil {
-			logger.Log.Error("Failed to register with Eureka", zap.Error(err))
+			logger.Log.Error("eureka registration failed",
+				zap.String(logger.F.ErrorKind, "eureka_registration"),
+				zap.Error(err),
+			)
 		} else {
 			go discovery.SendHeartbeat(eurekaConfig)
 		}
 	}
 
-	// 0.2 Initialize Telemetry (OTel + Prometheus)
+	// ── 4. Telemetry ──────────────────────────────────────────────────────
 	otelCleanup, err := telemetry.InitTelemetry(cfg.Server.ServiceName)
 	if err != nil {
-		logger.Log.Fatal("Failed to initialize telemetry", zap.Error(err))
+		logger.Log.Fatal("telemetry init failed",
+			zap.String(logger.F.ErrorKind, "otel_init"),
+			zap.Error(err),
+		)
 	}
 	defer otelCleanup()
 
-	// 1. Connect to NATS
+	// ── 5. NATS connection ────────────────────────────────────────────────
 	var nc *nats.Conn
 	if cfg.NATS.User != "" && cfg.NATS.Password != "" {
 		nc, err = nats.Connect(cfg.NATS.URL, nats.UserInfo(cfg.NATS.User, cfg.NATS.Password))
 	} else {
 		nc, err = nats.Connect(cfg.NATS.URL)
 	}
-
 	if err != nil {
-		logger.Log.Fatal("Failed to connect to NATS", zap.Error(err), zap.String("url", cfg.NATS.URL))
+		logger.Log.Fatal("NATS connect failed",
+			zap.String(logger.F.ErrorKind, "nats_connect"),
+			zap.String("url", cfg.NATS.URL),
+			zap.Error(err),
+		)
 	}
 	defer nc.Close()
-	logger.Log.Info("Connected to NATS", zap.String("url", cfg.NATS.URL))
+	logger.Log.Info("NATS connected", zap.String("url", cfg.NATS.URL))
 
-	// 2. Connect to PostgreSQL
+	// ── 6. PostgreSQL connection ──────────────────────────────────────────
 	dbConfig := database.Config{
 		Host:            cfg.DB.Host,
 		Port:            cfg.DB.Port,
@@ -103,58 +120,65 @@ func main() {
 
 	db, err := database.Connect(dbConfig)
 	if err != nil {
-		logger.Log.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
+		logger.Log.Fatal("postgres connect failed",
+			zap.String(logger.F.ErrorKind, "db_connect"),
+			zap.Error(err),
+		)
 	}
 	defer db.Close()
-	logger.Log.Info("Successfully connected to PostgreSQL")
+	logger.Log.Info("postgres connected")
 
 	migrationsPath := getEnv("MIGRATIONS_PATH", "internal/infrastructure/migrations")
 	if err := db.RunMigrations(migrationsPath); err != nil {
-		logger.Log.Fatal("Failed to run database migrations", zap.Error(err))
+		logger.Log.Fatal("migrations failed",
+			zap.String(logger.F.ErrorKind, "db_migration"),
+			zap.Error(err),
+		)
 	}
-	logger.Log.Info("Database migrations completed")
+	logger.Log.Info("migrations completed")
 
-// 3. Initialize Infrastructure
-	natsClient := event.NewNatsClient(nc)
+	// ── 7. Infrastructure & handlers ─────────────────────────────────────
+	natsClient  := event.NewNatsClient(nc)
 	storagePath := getEnv("CODE_STORAGE_PATH", "./storage")
 	codeStorage := storage.NewStorage(storagePath)
-
-	// 4. Initialize Handlers and Auth Resolver
-	resolver := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
+	resolver    := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
 
 	docsBasePath := getEnv("DOCS_PATH", "./docs")
-	docsService := application.NewDocsService(docsBasePath)
-	docsHandler := transportHTTP.NewDocsHandler(docsService)
+	docsService  := application.NewDocsService(docsBasePath)
+	docsHandler  := transportHTTP.NewDocsHandler(docsService)
 
-	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region,docsHandler)
+	handlers := transportHTTP.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region, docsHandler)
 
-	// 5. Setup Gin router
+	// ── 8. Router ─────────────────────────────────────────────────────────
 	router := gin.New()
-	router.Use(transportHTTP.ZapMiddleware(cfg.Server.ServiceName), gin.Recovery())
-
+	router.Use(
+		transportHTTP.ZapMiddleware(cfg.Server.ServiceName), // attaches trace/request IDs to ctx
+		gin.Recovery(),
+	)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
-
 	transportHTTP.SetupRoutes(router, handlers)
 
-	// 5.5 Start NATS listeners
+	// ── 9. NATS listeners ─────────────────────────────────────────────────
 	if err := transportNATS.StartScaleEventServer(natsClient, db); err != nil {
-		logger.Log.Error("Failed to start scale event listener", zap.Error(err))
+		logger.Log.Error("scale event listener failed to start",
+			zap.String(logger.F.ErrorKind, "nats_listener"),
+			zap.Error(err),
+		)
 	}
 
-	// 6. Start server
-	logger.Log.Info("Lambda Service starting", zap.String("port", cfg.Server.Port))
+	// ── 10. Start HTTP server ─────────────────────────────────────────────
+	logger.Log.Info("HTTP server listening", zap.String("port", cfg.Server.Port))
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
-		logger.Log.Fatal("Failed to start server", zap.Error(err))
+		logger.Log.Fatal("HTTP server crashed",
+			zap.String(logger.F.ErrorKind, "http_server"),
+			zap.Error(err),
+		)
 	}
-
 }
 
-// Helpers
-
 func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	return value
+	return defaultValue
 }

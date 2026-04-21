@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"lambda/internal/domain/dto"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

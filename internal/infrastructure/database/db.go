@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	"go.uber.org/zap"
 

@@ -8,7 +8,7 @@ import (
 	"lambda/internal/domain/dto"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	github_nats "github.com/nats-io/nats.go"
 	"go.uber.org/zap"

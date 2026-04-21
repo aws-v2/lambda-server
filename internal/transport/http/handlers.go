@@ -18,7 +18,7 @@ import (
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
 	"lambda/internal/infrastructure/storage"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	"go.uber.org/zap"
 

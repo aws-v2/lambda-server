@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"lambda/internal/infrastructure/event"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 )
 
 type AuthorizeRequest struct {
@@ -68,9 +68,9 @@ func (a *Authorizer) Authorize(ctx context.Context, accountID, principalID, reso
 		return false, fmt.Errorf("authorization failed: %w", err)
 	}
 
-	subject := fmt.Sprintf("%s.iam.v1.authorize", a.Env)
+	subject := fmt.Sprintf("%s.iam.authorize", a.Env)
 	if a.Env == "" {
-		subject = "iam.v1.authorize" // Fallback if env not set
+		subject = "iam.authorize" // Fallback if env not set
 	}
 
 	// Send NATS Request with 5 second timeout

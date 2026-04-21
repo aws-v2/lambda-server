@@ -9,7 +9,7 @@ import (
 
 	"lambda/internal/domain/dto"
 	"lambda/internal/infrastructure/auth"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"

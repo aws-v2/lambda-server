@@ -60,7 +60,7 @@ jobs:
               -e DB_USER=postgres-prod-user \
               -e DB_PASSWORD=postgres-prod-password \
               -e DB_NAME=lambda_db \
-              -e DB_SSLMODE=require \
+              -e DB_SSLMODE=disable \
               -e NATS_URL=nats://nats-prod:4222 \
               -e NATS_USER=nats-prod-user \
               -e NATS_PASSWORD=nats-prod-password \

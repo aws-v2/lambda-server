@@ -8,7 +8,7 @@ import (
 	"lambda/internal/domain/dto"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
-	"lambda/internal/logger"
+	"lambda/internal/utils/logger"
 
 	github_nats "github.com/nats-io/nats.go"
 	"go.uber.org/zap"
@@ -22,8 +22,8 @@ func StartScaleEventServer(nc *event.NatsClient, db *database.DB) error {
 
 	queueGroup := "lambda-scale-listeners"
 	subjects := []string{
-		fmt.Sprintf("%s.lambda.v1.scale.out", env),
-		fmt.Sprintf("%s.lambda.v1.scale.in", env),
+		fmt.Sprintf("%s.lambda.scale.out", env),
+		fmt.Sprintf("%s.lambda.scale.in", env),
 	}
 
 	for _, subject := range subjects {

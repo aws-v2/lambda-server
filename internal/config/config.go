@@ -3,14 +3,13 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"lambda/internal/utils/logger"
+	"net"
 	"net/http"
 	"os"
-	"time"
-
-	"lambda/internal/logger"
 	"strconv"
-	"net"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -30,6 +29,7 @@ type Config struct {
 
 	// Profiles
 	Profile string
+	NatsPrefix string
 }
 
 type DBConfig struct {
@@ -90,51 +90,73 @@ func Load() (*Config, error) {
 		Eureka: EurekaConfig{
 			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),
 		},
-		Profile: getEnv("APP_PROFILE", "dev"),
+		Profile: getEnv("APP_PROFILE", "dev.v1"),
+		NatsPrefix: getEnv("NATS_PREFIX", "dev.v1"),
 	}
 
 	return cfg, nil
 }
 
-// CheckReachability performs a TCP reachability check on a target address with retries
+// CheckReachability performs a TCP reachability check on a target address with retries.
 func CheckReachability(target string, maxRetries int, delay time.Duration) error {
-	// If target is a URL, extract host and port
-	address := target
-	if strings.HasPrefix(target, "nats://") {
-		address = strings.TrimPrefix(target, "nats://")
-	} else if strings.HasPrefix(target, "http://") {
-		address = strings.TrimPrefix(target, "http://")
-		if idx := strings.Index(address, "/"); idx != -1 {
-			address = address[:idx]
-		}
-	} else if strings.HasPrefix(target, "https://") {
-		address = strings.TrimPrefix(target, "https://")
-		if idx := strings.Index(address, "/"); idx != -1 {
-			address = address[:idx]
-		}
-	}
+	address := extractAddress(target)
 
-	var conn net.Conn
 	var err error
-
 	for i := 0; i < maxRetries; i++ {
-		logger.Log.Info("Checking TCP reachability...", zap.String("target", address), zap.Int("attempt", i+1))
-		conn, err = net.DialTimeout("tcp", address, 2*time.Second)
-		if err == nil {
+		logger.Log.Debug("TCP reachability check",
+			zap.String("target", address),
+			zap.Int("attempt", i+1),
+			zap.Int("max_retries", maxRetries),
+		)
+
+		conn, dialErr := net.DialTimeout("tcp", address, 2*time.Second)
+		if dialErr == nil {
 			conn.Close()
-			logger.Log.Info("Target is reachable", zap.String("target", address))
+			logger.Log.Info("target reachable",
+				zap.String("target", address),
+				zap.Int("attempt", i+1),
+			)
 			return nil
 		}
 
-		logger.Log.Warn("Target unreachable", zap.String("target", address), zap.Error(err), zap.Int("attempt", i+1))
+		err = dialErr
+		logger.Log.Warn("target unreachable, retrying",
+			zap.String(logger.F.ErrorKind, "tcp_unreachable"),
+			zap.String("target", address),
+			zap.Int("attempt", i+1),
+			zap.Int("max_retries", maxRetries),
+			zap.Duration("next_retry_in", delay),
+			zap.Error(err),
+		)
+
 		if i < maxRetries-1 {
 			time.Sleep(delay)
 		}
 	}
 
-	logger.Log.Error("FATAL: Service reachability check failed", zap.String("target", address), zap.Int("total_attempts", maxRetries))
+	logger.Log.Error("reachability check exhausted",
+		zap.String(logger.F.ErrorKind, "reachability_exhausted"),
+		zap.String("target", address),
+		zap.Int("total_attempts", maxRetries),
+		zap.Error(err),
+	)
 	return fmt.Errorf("failed to reach %s after %d attempts: %w", address, maxRetries, err)
 }
+
+// extractAddress strips the scheme and path from a URL, returning host:port.
+func extractAddress(target string) string {
+	for _, scheme := range []string{"nats://", "http://", "https://"} {
+		if strings.HasPrefix(target, scheme) {
+			address := strings.TrimPrefix(target, scheme)
+			if idx := strings.Index(address, "/"); idx != -1 {
+				address = address[:idx]
+			}
+			return address
+		}
+	}
+	return target
+}
+
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {

@@ -1,4 +1,4 @@
-package http
+package handlers
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"lambda/internal/domain/dto"
+	"lambda/internal/infrastructure/database"
+	"lambda/internal/infrastructure/event"
 	"lambda/internal/utils/logger"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +18,18 @@ import (
 	"go.uber.org/zap"
 )
 
-func (h *LambdaHandlers) CreatePolicy(c *gin.Context) {
+type PolicyHandler struct {
+	DB                *database.DB
+	Nats              *event.NatsClient
+	ResolveFunction   func(identifier, userID string) (*database.Function, error)
+	ResolveIdentifier func(c *gin.Context) string
+}
+
+func NewPolicyHandler() *PolicyHandler {
+	return &PolicyHandler{}
+}
+
+func (h *PolicyHandler) CreatePolicy(c *gin.Context) {
 	var req dto.PolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -30,6 +43,10 @@ func (h *LambdaHandlers) CreatePolicy(c *gin.Context) {
 		ResourceID:   req.ResourceID,
 		Action:       req.Action,
 	})
+}
+
+func (h *PolicyHandler) handlePolicyOperation(c *gin.Context, s string, event *dto.PolicyEvent) {
+	panic("unimplemented")
 }
 
 func (h *LambdaHandlers) UpdatePolicy(c *gin.Context) {
@@ -73,16 +90,16 @@ func (h *LambdaHandlers) handlePolicyOperation(c *gin.Context, op string, event 
 	requestID := uuid.New().String()
 	event.RequestID = requestID
 
-	publishSubject  := fmt.Sprintf("%s.lambda.policy.%s", env, op)
+	publishSubject := fmt.Sprintf("%s.lambda.policy.%s", env, op)
 	responseSubject := fmt.Sprintf("%s.iam.policy.*", env)
 
 	// Build a request-scoped logger: picks up trace/request IDs from context
 	// if the Gin middleware injected them, otherwise falls back to the handler logger.
 	log := logger.WithContext(c.Request.Context()).With(
-		zap.String(logger.F.Domain,    "policy"),
-		zap.String(logger.F.Action,    "policy."+op),
+		zap.String(logger.F.Domain, "policy"),
+		zap.String(logger.F.Action, "policy."+op),
 		zap.String(logger.F.RequestID, requestID),
-		zap.String("publish_subject",  publishSubject),
+		zap.String("publish_subject", publishSubject),
 	)
 
 	respChan := make(chan *dto.PolicyEvent, 1)

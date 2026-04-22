@@ -65,6 +65,7 @@ jobs:
               -e EUREKA_SERVER_URL=http://discovery-server-staging:8761/eureka \
               -e SERVICE_NAME=lambda-service \
               -e AWS_REGION=eu-north-1 \
+              -e NATS_PREFIX=staging.v1 \
               -e PORT=8089 \
               qarani/lambda-service:staging
 

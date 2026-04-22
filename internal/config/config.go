@@ -91,6 +91,7 @@ func Load() (*Config, error) {
 			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),
 		},
 		Profile: getEnv("APP_PROFILE", "dev.v1"),
+		NatsPrefix: getEnv("NATS_PREFIX", "dev.v1"),
 	}
 
 	return cfg, nil

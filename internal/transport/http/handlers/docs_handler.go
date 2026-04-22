@@ -1,4 +1,4 @@
-package http
+package handlers
 
 import (
 	"lambda/internal/application"
@@ -7,7 +7,7 @@ import (
 )
 
 
-type DocsHandler struct {
+type DocsHandler struct {	
 	service *application.DocsService
 }
 func NewDocsHandler(service *application.DocsService) *DocsHandler {

@@ -67,9 +67,9 @@ func Load() (*Config, error) {
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", ""),
-			Password:        getEnv("DB_PASSWORD", ""),
-			Database:        getEnv("DB_NAME", ""),
+			User:            getEnv("DB_USER", "postgres-prod-user"),
+			Password:        getEnv("DB_PASSWORD", "postgres-prod-password"),
+			Database:        getEnv("DB_NAME", "lambda_db"),
 			SSLMode:         getEnv("DB_SSLMODE", "disable"),
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
@@ -78,8 +78,8 @@ func Load() (*Config, error) {
 		},
 		NATS: NATSConfig{
 			URL:      getEnv("NATS_URL", "nats://localhost:4222"),
-			User:     getEnv("NATS_USER", ""),
-			Password: getEnv("NATS_PASSWORD", ""),
+			User:     getEnv("NATS_USER", "auth-server"),
+			Password: getEnv("NATS_PASSWORD", "auth-secret"),
 		},
 		Server: ServerConfig{
 			Port:        getEnv("PORT", "8089"),

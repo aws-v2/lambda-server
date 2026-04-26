@@ -1,13 +1,40 @@
-name: Production Deployment
+name: Prod deployment env
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 jobs:
-  build-and-push:
+  prod-test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: Install libvirt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libvirt-dev \
+            libvirt-daemon \
+            pkg-config
+      - name: Download dependencies
+        run: go mod download
+      - name: Build
+        run: go build ./...
+      - name: Run tests
+        run: go test ./... -v
 
+  prod-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: prod-test
     steps:
     - uses: actions/checkout@v4
 
@@ -25,11 +52,13 @@ jobs:
       with:
         context: .
         push: true
-        tags: qarani/lambda-service:latest
+        tags: qarani/lambda-server:prod
 
-  deploy:
-    needs: build-and-push
+  prod-deploy:
+    needs: prod-build
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +67,7 @@ jobs:
           curl -fsSL https://tailscale.com/install.sh | sh
           sudo tailscale up --authkey ${{ secrets.TAILSCALE_AUTH_KEY }}
 
-      - name: Deploy to Production via SSH over Tailscale.
+      - name: Deploy to Prod via SSH over Tailscale
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PROD_HOST }}
@@ -46,23 +75,34 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           script: |
             docker network create aws-prod-network || true
-            docker pull qarani/lambda-service:latest
-            docker stop lambda-service-prod || true
-            docker rm lambda-service-prod || true
-            docker run -d --name lambda-service-prod \
+            docker pull qarani/lambda-server:prod
+            docker stop lambda-server-prod || true
+            docker rm lambda-server-prod || true
+            docker run -d \
+              --name lambda-server-prod \
               --network aws-prod-network \
               -p 8089:8089 \
               -e APP_PROFILE=prod \
               -e DB_HOST=postgres-prod \
               -e DB_PORT=5432 \
-              -e DB_USER=lambda-server \
-              -e DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }} \
+              -e DB_USER=postgres-prod-user \
+              -e DB_PASSWORD=postgres-prod-password \
               -e DB_NAME=lambda_db \
+              -e DB_SSLMODE=disable \
               -e NATS_URL=nats://nats-prod:4222 \
-              -e NATS_USER=lambda-server \
-              -e NATS_PASSWORD=${{ secrets.PROD_NATS_PASSWORD }} \
-              -e EUREKA_SERVER_URL=http://eureka-prod:8761/eureka \
-              -e SERVICE_NAME=lambda-service \
-              -e AWS_REGION=eu-north-1 \
-              -e PORT=8089 \
-              qarani/lambda-service:latest
+              -e NATS_USER=nats-prod-user \
+              -e NATS_PASSWORD=nats-prod-password \
+              -e INSTANCE_TOKEN_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970 \
+              -e HTTP_PORT=8089 \
+              -e EUREKA_SERVER_URL=http://discovery-server-prod:8761/eureka \
+              -e EUREKA_APP_NAME=LAMBDA-SERVER \
+              -e EUREKA_HOSTNAME=lambda-server-prod \
+              -e EUREKA_IP_ADDR=lambda-server-prod \
+              -e EUREKA_VIP_ADDRESS=lambda-server \
+              -e EUREKA_INSTANCE_ID=lambda-server:8089 \
+              -e EUREKA_HEARTBEAT_INTERVAL=30s \
+              qarani/lambda-server:prod
+
+
+
+

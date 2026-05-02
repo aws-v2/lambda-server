@@ -234,35 +234,33 @@ func (h *InvokeHandler) Invoke(c *gin.Context) {
 	}()
 
 	c.Stream(func(w io.Writer) bool {
-		if msg, ok := <-eventChan; ok {
-			if msg == "DONE" {
-				log.Info("stream completed",
-					zap.String("task_id", taskID),
-				)
-				return false
-			}
+    if msg, ok := <-eventChan; ok {
+        if msg == "DONE" {
+            log.Info("stream completed", zap.String("task_id", taskID))
+            return false
+        }
 
-			var eventData map[string]interface{}
-			if err := json.Unmarshal([]byte(msg), &eventData); err == nil {
-				if status, sOk := eventData["status"].(string); sOk && status == "error" {
-					log.Warn("task reported error",
-						zap.String(logger.F.ErrorKind, "execution_error"),
-						zap.String("task_id", taskID),
-					)
+        var eventData map[string]interface{}
+        if err := json.Unmarshal([]byte(msg), &eventData); err == nil {
+            if status, sOk := eventData["status"].(string); sOk && status == "error" {
+                log.Warn("task reported error",
+                    zap.String(logger.F.ErrorKind, "execution_error"),
+                    zap.String("task_id", taskID),
+                )
+                metric.Status = "error"
+                if errMsg, mOk := eventData["message"].(string); mOk {
+                    metric.ErrorMessage = errMsg
+                }
+            }
+        }
 
-					metric.Status = "error"
-					if errMsg, mOk := eventData["message"].(string); mOk {
-						metric.ErrorMessage = errMsg
-					}
-
-					c.SSEvent("status", gin.H{"error": eventData})
-					return true
-				}
-			}
-
-			c.SSEvent("status", msg)
-			return true
-		}
-		return false
-	})
+        // Write raw JSON directly — no double encoding
+        fmt.Fprintf(w, "data: %s\n\n", msg)
+        if f, ok := w.(http.Flusher); ok {
+            f.Flush()
+        }
+        return true
+    }
+    return false
+})
 }

@@ -52,7 +52,8 @@ jobs:
       with:
         context: .
         push: true
-        tags: qarani/lambda-server:staging-${{github.sha}}, qarani/lambda-server:staging
+        tags: qarani/lambda-server:staging-${{github.sha}}
+              qarani/lambda-server:staging
 
   staging-deploy:
     needs: staging-build-image

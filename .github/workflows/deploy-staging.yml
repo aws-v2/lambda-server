@@ -52,7 +52,7 @@ jobs:
       with:
         context: .
         push: true
-        tags: qarani/lambda-server:staging
+        tags: qarani/lambda-server:staging-${{github.sha}}, qarani/lambda-server:staging
 
   staging-deploy:
     needs: staging-build-image
@@ -75,7 +75,7 @@ jobs:
           key: ${{ secrets.STAGING_SSH_KEY }}
           script: |
             docker network create aws-staging-network || true
-            docker pull qarani/lambda-service:staging
+            docker pull qarani/lambda-service:staging-${{github.sha}}
             docker stop lambda-service-staging || true
             docker rm lambda-service-staging || true
             docker run -d --name lambda-service-staging \
@@ -97,7 +97,7 @@ jobs:
               -e AWS_REGION=eu-north-1 \
               -e NATS_PREFIX=staging.v1 \
               -e PORT=8089 \
-              qarani/lambda-service:staging
+              qarani/lambda-service:staging-${{github.sha}}
 
 
   staging-open-pr-to-main:

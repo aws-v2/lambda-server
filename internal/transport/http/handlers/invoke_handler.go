@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"lambda/internal/domain"
 	"lambda/internal/domain/dto"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
@@ -19,12 +20,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type 	InvokeHandler struct {
-	DB *database.DB
-	Nats *event.NatsClient
-	ResolveFunction func(identifier, userID string) (*database.Function, error)
+type InvokeHandler struct {
+	DB                *database.DB
+	Nats              *event.NatsClient
+	ResolveFunction   func(identifier, userID string) (*database.Function, error)
 	ResolveIdentifier func(c *gin.Context) string
-	NatsPrefix string
+	NatsPrefix        string
 }
 
 func NewInvokeHandler(db *database.DB, nats *event.NatsClient, natsPrefix string) *InvokeHandler {
@@ -52,6 +53,27 @@ func NewInvokeHandler(db *database.DB, nats *event.NatsClient, natsPrefix string
 	return h
 }
 
+type createPresignDownloadURLRequest struct {
+	UserID        string `json:"user_id"`
+	CorrelationID string `json:"correlation_id"`
+	FileSha256    string `json:"sha256"`
+	AssetID       string `json:"asset_id"`
+	FileCount     int    `json:"file_count"`
+}
+type createPresignDownloadURLResponse struct {
+	URL string `json:"url"`
+}
+
+
+type AssetConfigs struct {
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+type GameManifest struct {
+	Parameters map[string]string `json:"parameters"`
+}
 
 func (h *InvokeHandler) Invoke(c *gin.Context) {
 	log := logger.WithContext(c.Request.Context()).With(
@@ -84,11 +106,8 @@ func (h *InvokeHandler) Invoke(c *gin.Context) {
 		}
 	}
 
-	userID, _ := c.Get("user_id")
-	userIDStr := ""
-	if id, ok := userID.(string); ok {
-		userIDStr = id
-	}
+	userID := c.GetString("userID")
+	userIDStr := userID
 
 	log = log.With(
 		zap.String("function_identifier", identifier),
@@ -135,7 +154,7 @@ func (h *InvokeHandler) Invoke(c *gin.Context) {
 	envMap["PAYLOAD"] = string(payloadData)
 
 	msg := dto.NatsMessage{
-		TraceID: c.GetString("trace_id"),
+		TraceID: uuid.New().String(),
 		TaskID:  taskID,
 		Type:    fn.Type,
 		Image:   fn.Image,
@@ -195,72 +214,102 @@ func (h *InvokeHandler) Invoke(c *gin.Context) {
 	go func() {
 		msgData, _ := json.Marshal(msg)
 
-		respData, err := h.Nats.Request(c.Request.Context(), h.NatsPrefix+".fargate.tasks.run", msgData, 5*time.Minute)
 
-		select {
-		case <-doneChan:
+		fmt.Printf("%T", msgData)
+
+		uploadPresignUrl := fmt.Sprintf("%s.s3.task.create_presign_download_url", h.NatsPrefix)
+
+		payload, _ := json.Marshal(createPresignDownloadURLRequest{
+			UserID:        userID,
+			CorrelationID: uuid.New().String(),
+			FileSha256:    fn.Sha256,
+			AssetID:       fn.ID,
+			FileCount:     1,
+		})
+
+		s3UrlRespData, err := h.Nats.Request(c.Request.Context(), uploadPresignUrl, payload, 5*time.Minute)
+
+		var respo createPresignDownloadURLResponse
+		error := json.Unmarshal(s3UrlRespData, &respo)
+
+		if error != nil {
+			fmt.Printf("failed to Unmarshal payload: %w", err)
+
 			return
-		default:
+			// return  fmt.Errorf("failed to Unmarshal payload: %w", err)
 		}
 
-		if err != nil {
-			log.Error("task execution request failed",
-				zap.String(logger.F.ErrorKind, "nats_request_error"),
-				zap.String("task_id", taskID),
-				zap.Error(err),
-			)
-			metric.Status = "error"
-			metric.ErrorMessage = fmt.Sprintf("NATS request failed: %v", err)
+		fmt.Printf("------99>*:%v", respo.URL)
 
-			select {
-			case eventChan <- fmt.Sprintf(`{"status":"error", "message":"%v"}`, err):
-			case <-doneChan:
-			}
-			return
+		assets := []domain.AssetConfigs{}
+
+		assets = append(assets, domain.AssetConfigs{
+			Name:   fmt.Sprintf("%s-lambda", identifier),
+			Source: "here in lambda",
+			URL:    fmt.Sprintf("%s", respo.URL),
+			DestPath:   "/opt/",
+			Path:   "/opt/",
+			SHA256: fn.Sha256,
+			Executable: true,
+			Unpack: false,
+		})
+
+ 
+
+	 
+		provisionInstanceRequest := domain.ProvisionInstanceEvent{
+			UserID: userID,
+			Profile: "lambda",
+			Name: fn.Name,
+			ResourceID: fn.ID,
+			Specs: domain.VMSpecs{
+				CPU: 2,
+				RAM: 2048,
+				Storage: 15,
+			},
+			SessionID: c.GetString("requestID"),
+			Assets: assets,
 		}
 
-		log.Info("task execution completed",
-			zap.String("task_id", taskID),
-		)
+		ec2Payload,_ := json.Marshal(provisionInstanceRequest)
 
-		select {
-		case eventChan <- string(respData):
-			select {
-			case eventChan <- "DONE":
-			case <-doneChan:
-			}
-		case <-doneChan:
+
+		ec2ProvisionSubject := fmt.Sprintf("%s.ec2.task.provision", h.NatsPrefix)
+
+		_, errr := h.Nats.Request(c.Request.Context(), ec2ProvisionSubject, ec2Payload, 5*time.Minute)
+		if errr!=nil{
+			fmt.Errorf("Failed to send the .provision request to ec2")
 		}
 	}()
 
 	c.Stream(func(w io.Writer) bool {
-    if msg, ok := <-eventChan; ok {
-        if msg == "DONE" {
-            log.Info("stream completed", zap.String("task_id", taskID))
-            return false
-        }
+		if msg, ok := <-eventChan; ok {
+			if msg == "DONE" {
+				log.Info("stream completed", zap.String("task_id", taskID))
+				return false
+			}
 
-        var eventData map[string]interface{}
-        if err := json.Unmarshal([]byte(msg), &eventData); err == nil {
-            if status, sOk := eventData["status"].(string); sOk && status == "error" {
-                log.Warn("task reported error",
-                    zap.String(logger.F.ErrorKind, "execution_error"),
-                    zap.String("task_id", taskID),
-                )
-                metric.Status = "error"
-                if errMsg, mOk := eventData["message"].(string); mOk {
-                    metric.ErrorMessage = errMsg
-                }
-            }
-        }
+			var eventData map[string]interface{}
+			if err := json.Unmarshal([]byte(msg), &eventData); err == nil {
+				if status, sOk := eventData["status"].(string); sOk && status == "error" {
+					log.Warn("task reported error",
+						zap.String(logger.F.ErrorKind, "execution_error"),
+						zap.String("task_id", taskID),
+					)
+					metric.Status = "error"
+					if errMsg, mOk := eventData["message"].(string); mOk {
+						metric.ErrorMessage = errMsg
+					}
+				}
+			}
 
-        // Write raw JSON directly — no double encoding
-        fmt.Fprintf(w, "data: %s\n\n", msg)
-        if f, ok := w.(http.Flusher); ok {
-            f.Flush()
-        }
-        return true
-    }
-    return false
-})
+			// Write raw JSON directly — no double encoding
+			fmt.Fprintf(w, "data: %s\n\n", msg)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			return true
+		}
+		return false
+	})
 }

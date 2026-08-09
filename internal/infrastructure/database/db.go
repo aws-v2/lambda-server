@@ -55,6 +55,7 @@ type ResourceDetails struct {
 }
 
 type Function struct {
+	ID string `json:"id"`
 	Name                   string
 	ARN                    string
 	UserID                 string
@@ -66,6 +67,7 @@ type Function struct {
 	TimeoutMS              int
 	Description            string
 	ProvisionedConcurrency int
+	Sha256 string
 }
 
 type LambdaMetric struct {
@@ -203,10 +205,11 @@ func (db *DB) SaveFunction(f Function) error {
 	envData, _ := json.Marshal(f.Env)
 
 	query := `
-	INSERT INTO functions (name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	INSERT INTO functions (name,id,  arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	ON CONFLICT (name) DO UPDATE SET
-		arn = EXCLUDED.arn,
+	id=EXCLUDED.id,	
+	arn = EXCLUDED.arn,
 		user_id = EXCLUDED.user_id,
 		type = EXCLUDED.type,
 		image = EXCLUDED.image,
@@ -215,9 +218,10 @@ func (db *DB) SaveFunction(f Function) error {
 		env = EXCLUDED.env,
 		timeout_ms = EXCLUDED.timeout_ms,
 		description = EXCLUDED.description,
-		provisioned_concurrency = EXCLUDED.provisioned_concurrency;`
+		provisioned_concurrency = EXCLUDED.provisioned_concurrency,
+		sha256 =EXCLUDED.sha256;`
 
-	_, err := db.conn.Exec(query, f.Name, f.ARN, f.UserID, f.Type, f.Image, execData, resData, envData, f.TimeoutMS, f.Description, f.ProvisionedConcurrency)
+	_, err := db.conn.Exec(query, f.Name,f.ID, f.ARN, f.UserID, f.Type, f.Image, execData, resData, envData, f.TimeoutMS, f.Description, f.ProvisionedConcurrency, f.Sha256)
 	if err != nil {
 		logger.Log.Error("Failed to save function", zap.String("name", f.Name), zap.Error(err))
 		return err
@@ -227,12 +231,12 @@ func (db *DB) SaveFunction(f Function) error {
 
 func (db *DB) GetFunction(name string, userID string) (*Function, error) {
 	logger.Log.Debug("Fetching function...", zap.String("name", name), zap.String("userID", userID))
-	query := `SELECT name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency FROM functions WHERE name = $1 AND user_id = $2`
+	query := `SELECT id, name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency,sha256 FROM functions WHERE name = $1 AND user_id = $2`
 	var f Function
 	var image, uID, desc, arn sql.NullString
 	var execData, resData, envData []byte
 
-	err := db.conn.QueryRow(query, name, userID).Scan(&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency)
+	err := db.conn.QueryRow(query, name, userID).Scan(&f.ID,&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency, &f.Sha256)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			logger.Log.Warn("Function not found", zap.String("name", name), zap.String("userID", userID))
@@ -255,12 +259,12 @@ func (db *DB) GetFunction(name string, userID string) (*Function, error) {
 
 func (db *DB) GetFunctionByARN(arn string, userID string) (*Function, error) {
 	logger.Log.Debug("Fetching function by ARN...", zap.String("arn", arn), zap.String("userID", userID))
-	query := `SELECT name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency FROM functions WHERE arn = $1 AND user_id = $2`
+	query := `SELECT id, name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256 FROM functions WHERE arn = $1 AND user_id = $2`
 	var f Function
 	var image, uID, desc, savedArn sql.NullString
 	var execData, resData, envData []byte
 
-	err := db.conn.QueryRow(query, arn, userID).Scan(&f.Name, &savedArn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency)
+	err := db.conn.QueryRow(query, arn, userID).Scan(&f.ID,&f.Name, &savedArn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency, &f.Sha256)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			logger.Log.Warn("Function not found by ARN", zap.String("arn", arn), zap.String("userID", userID))
@@ -368,7 +372,7 @@ func (db *DB) GetMetrics(name string, userID string) (*LambdaMetricsResponse, er
 
 func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 	logger.Log.Debug("Listing functions for user...", zap.String("userID", userID))
-	query := `SELECT name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency FROM functions WHERE user_id = $1`
+	query := `SELECT id,name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256 FROM functions WHERE user_id = $1`
 
 	rows, err := db.conn.Query(query, userID)
 	if err != nil {
@@ -383,7 +387,7 @@ func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 		var image, uID, desc, arn sql.NullString
 		var execData, resData, envData []byte
 
-		if err := rows.Scan(&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency); err != nil {
+		if err := rows.Scan(&f.ID,&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency, &f.Sha256); err != nil {
 			logger.Log.Error("Failed to scan function row", zap.Error(err))
 			continue
 		}

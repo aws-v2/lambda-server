@@ -9,10 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"lambda/internal/utils/logger"
-
-	"go.uber.org/zap"
 )
+
 
 // =====================
 // Models (match frontend)
@@ -30,8 +28,10 @@ type DocCategory struct {
 
 type DocManifest struct {
 	Service    string        `json:"service"`
-	Version    string        `json:"version,omitempty"`
-	Categories []DocCategory `json:"categories"`
+	APIVersion string        `json:"apiVersion,omitempty"`
+	Scope      string        `json:"scope"`
+	Internal   []DocCategory `json:"internal,omitempty"`
+	Public     []DocCategory `json:"public,omitempty"`
 }
 
 type Metadata struct {
@@ -53,117 +53,73 @@ type DocResponse struct {
 
 type DocsService struct {
 	basePath string // e.g. "./docs"
-	log      *zap.Logger
 }
 
 func NewDocsService(basePath string) *DocsService {
-	return &DocsService{
-		basePath: basePath,
-		log: logger.Log.With(
-			zap.String(logger.F.Domain, "docs"),
-		),
-	}
+	return &DocsService{basePath: basePath}
 }
 
 // =====================
 // Public API
 // =====================
 
+// GetManifest loads manifest.json from public/internal folder
 func (s *DocsService) GetManifest(internal bool) (*DocManifest, error) {
 	scope := s.getScope(internal)
 	path := filepath.Join(s.basePath, scope, "manifest.json")
 
-	s.log.Debug("reading manifest",
-		zap.String("path", path),
-		zap.String("scope", scope),
-	)
+	// Log the resolved path — helps debug container vs dev mismatches
+	fmt.Printf("[DocsService] reading manifest: %s\n", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			s.log.Warn("manifest not found",
-				zap.String(logger.F.ErrorKind, "manifest_not_found"),
-				zap.String("path", path),
-				zap.String("scope", scope),
-			)
 			return nil, fmt.Errorf("manifest not found at %q — check DOCS_PATH and folder structure", path)
 		}
-		s.log.Error("failed to read manifest",
-			zap.String(logger.F.ErrorKind, "manifest_read_error"),
-			zap.String("path", path),
-			zap.Error(err),
-		)
 		return nil, fmt.Errorf("failed to read manifest at %q: %w", path, err)
 	}
 
-	var manifest DocManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		s.log.Error("manifest JSON invalid",
-			zap.String(logger.F.ErrorKind, "manifest_parse_error"),
-			zap.String("path", path),
-			zap.Error(err),
-		)
+	// The on-disk manifest uses 'categories' and 'version'. Use a temp struct
+	var raw struct {
+		Service    string        `json:"service"`
+		Version    string        `json:"version"`
+		Categories []DocCategory `json:"categories"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("invalid manifest JSON at %q: %w", path, err)
 	}
 
-	s.log.Debug("manifest loaded",
-		zap.String("service", manifest.Service),
-		zap.String("version", manifest.Version),
-		zap.Int("category_count", len(manifest.Categories)),
-	)
+	manifest := &DocManifest{
+		Service:    raw.Service,
+		APIVersion: raw.Version,
+		Scope:      scope,
+	}
 
-	return &manifest, nil
+	if internal {
+		manifest.Internal = raw.Categories
+	} else {
+		manifest.Public = raw.Categories
+	}
+
+	return manifest, nil
 }
 
-// GetDoc loads a markdown file and parses frontmatter.
+// GetDoc loads a markdown file and parses frontmatter
 func (s *DocsService) GetDoc(slug string, internal bool) (*DocResponse, error) {
-	scope := s.getScope(internal)
-
 	if !isValidSlug(slug) {
-		s.log.Warn("invalid slug rejected",
-			zap.String(logger.F.ErrorKind, "invalid_slug"),
-			zap.String("slug", slug),
-			zap.String("scope", scope),
-		)
 		return nil, errors.New("invalid slug")
 	}
 
+	scope := s.getScope(internal)
 	path := filepath.Join(s.basePath, scope, slug+".md")
-
-	s.log.Debug("reading doc",
-		zap.String("slug", slug),
-		zap.String("path", path),
-		zap.String("scope", scope),
-	)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			s.log.Warn("doc not found",
-				zap.String(logger.F.ErrorKind, "doc_not_found"),
-				zap.String("slug", slug),
-				zap.String("path", path),
-				zap.String("scope", scope),
-			)
-			return nil, errors.New("not found")
-		}
-		s.log.Error("failed to read doc",
-			zap.String(logger.F.ErrorKind, "doc_read_error"),
-			zap.String("slug", slug),
-			zap.String("path", path),
-			zap.Error(err),
-		)
 		return nil, errors.New("not found")
 	}
 
 	meta, content := parseMarkdownWithFrontmatter(string(data))
-
-	s.log.Debug("doc loaded",
-		zap.String("slug", slug),
-		zap.String("title", meta.Title),
-		zap.Strings("tags", meta.Tags),
-		zap.Int("content_bytes", len(content)),
-	)
 
 	return &DocResponse{
 		Metadata: meta,
@@ -182,7 +138,7 @@ func (s *DocsService) getScope(internal bool) string {
 	return "public"
 }
 
-// isValidSlug prevents path traversal attacks.
+// Prevent path traversal attacks
 func isValidSlug(slug string) bool {
 	if slug == "" {
 		return false
@@ -202,6 +158,7 @@ func parseMarkdownWithFrontmatter(input string) (Metadata, string) {
 
 	parts := strings.SplitN(input, "---", 3)
 
+	// No frontmatter
 	if len(parts) < 3 {
 		meta.LastUpdated = time.Now().Format("2006-01-02")
 		return meta, strings.TrimSpace(input)
@@ -210,11 +167,15 @@ func parseMarkdownWithFrontmatter(input string) (Metadata, string) {
 	rawMeta := parts[1]
 	content := parts[2]
 
-	for _, line := range strings.Split(rawMeta, "\n") {
+	lines := strings.Split(rawMeta, "\n")
+
+	for _, line := range lines {
 		line = strings.TrimSpace(line)
+
 		if line == "" {
 			continue
 		}
+
 		switch {
 		case strings.HasPrefix(line, "title:"):
 			meta.Title = cleanValue(line, "title:")
@@ -234,14 +195,18 @@ func parseMarkdownWithFrontmatter(input string) (Metadata, string) {
 
 func cleanValue(line, prefix string) string {
 	val := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	return strings.Trim(val, `"`)
+	val = strings.Trim(val, `"`)
+	return val
 }
 
 func parseTags(input string) []string {
 	input = strings.Trim(input, "[]")
+	parts := strings.Split(input, ",")
+
 	var tags []string
-	for _, t := range strings.Split(input, ",") {
-		if tag := strings.TrimSpace(strings.Trim(t, `"`)); tag != "" {
+	for _, t := range parts {
+		tag := strings.TrimSpace(strings.Trim(t, `"`))
+		if tag != "" {
 			tags = append(tags, tag)
 		}
 	}

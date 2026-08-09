@@ -2,6 +2,7 @@ package http
 
 import (
 	"lambda/internal/transport/http/handlers"
+	"lambda/internal/transport/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +19,7 @@ func SetupRoutes(
 
 ) {
 	v1 := router.Group("/api/v1/lambda")
+	v1.Use(middleware.AuthMiddleware())
 	{
 		// Generic invoke (no function name in path)
 		v1.POST("/invoke", invokeHandlers.Invoke)
@@ -55,13 +57,7 @@ func SetupRoutes(
 	// Docs
 	docs := v1.Group("/docs")
 	{
-		docs.GET("", docsHandlers.GetPublicManifest)
-		docs.GET("/:slug", docsHandlers.GetPublicDoc)
-	}
-
-	internalDocs := v1.Group("/internal/docs")
-	{
-		internalDocs.GET("", docsHandlers.GetInternalManifest)
-		internalDocs.GET("/:slug", docsHandlers.GetInternalDoc)
+		docs.GET("", docsHandlers.GetManifest)
+		docs.GET("/:slug", docsHandlers.GetDoc)
 	}
 }

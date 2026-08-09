@@ -1,57 +1,122 @@
 package storage
 
 import (
+	// "archive/zip"
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	// "strings"
+	"time"
+
+	"lambda/internal/infrastructure/event"
 	"lambda/internal/utils/logger"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type Storage struct {
-	BaseDir string
+	BaseDir    string
+	natsPrefix string
+	natsClient *event.NatsClient
 }
 
-func NewStorage(baseDir string) *Storage {
-	return &Storage{BaseDir: baseDir}
+func NewStorage(baseDir, natsPrefix string, natsClient *event.NatsClient) *Storage {
+	return &Storage{BaseDir: baseDir, natsPrefix: natsPrefix, natsClient: natsClient}
 }
 
-func (s *Storage) SaveFunctionBinary(name string, reader io.Reader) (string, error) {
-	// Create directory: ./storage/functions/<name>/
-	funcDir := filepath.Join(s.BaseDir, "functions", name)
-	logger.Log.Debug("Creating function directory", zap.String("path", funcDir))
-	if err := os.MkdirAll(funcDir, 0755); err != nil {
-		logger.Log.Error("Failed to create function directory", zap.String("path", funcDir), zap.Error(err))
-		return "", fmt.Errorf("failed to create directory: %w", err)
+type createPresignedURLRequest struct {
+	UserID     string    `json:"user_id"`
+	GameID     string    `json:"game_id,omitempty"`
+	AssetID    string    `json:"asset_id"`
+	AssetType  AssetType `json:"asset_type"`  // "game" | "template"
+	AssetName  string    `json:"asset_name"`  // this is the nameof the job/game/render job this asset belongs to like kalshi or ruto tracker
+	BucketName string    `json:"bucket_name"` // this is the nameof the job/game/render job this asset belongs to like kalshi or ruto tracker
+	Key        string    `json:"key"`
+
+	Sha256 string `json:"sha256"`
+}
+
+type AssetType string
+
+const (
+	AssetTypeGame     AssetType = "game"
+	AssetTypeTemplate AssetType = "template"
+	AssetTypeAgent    AssetType = "agent"
+	AssetTypeScript   AssetType = "script"
+	AssetTypeLambda   AssetType = "lambda"
+)
+
+type createPresignedURLResponse struct {
+	UploadURL string `json:"upload_url"`
+}
+
+func (s *Storage) SaveFunctionBinary(ctx *gin.Context, name string, reader io.Reader, functionID string, fileBytes []byte, filesha string) (string, error) {
+	userid := ctx.GetString("userID")
+ 
+
+	uploadPresignUrl := fmt.Sprintf("%s.s3.task.create_presigned_url", s.natsPrefix)
+
+	fmt.Printf("\n------>:files sha**:\n %s",filesha)
+
+
+
+
+	payload := createPresignedURLRequest{
+		UserID:     userid,
+		AssetID:    functionID,
+		AssetType:  AssetTypeLambda,
+		AssetName:  name,
+		BucketName: "lambdas",
+		Key:        name,
+		Sha256:     filesha,
+		GameID:     functionID,
 	}
 
-	dstPath := filepath.Join(funcDir, "handler")
-	logger.Log.Debug("Saving function binary", zap.String("path", dstPath))
-	dst, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	data, err := json.Marshal(payload)
 	if err != nil {
-		logger.Log.Error("Failed to open binary file for writing", zap.String("path", dstPath), zap.Error(err))
-		return "", fmt.Errorf("failed to open destination file: %w", err)
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
 	}
-	defer dst.Close()
+	fmt.Printf("\n\n---6--->*:%v\n\n", payload.Sha256)
 
-	if _, err := io.Copy(dst, reader); err != nil {
-		return "", fmt.Errorf("failed to save binary: %w", err)
+	fmt.Printf("The sha thatwas presented to us was %s", filesha)
+
+	resp, err := s.natsClient.Request(ctx, uploadPresignUrl, data, time.Duration(time.Second*5))
+
+	var respo createPresignedURLResponse
+	error := json.Unmarshal(resp, &respo)
+
+	if error != nil {
+		return "", fmt.Errorf("failed to Unmarshal payload: %w", err)
 	}
 
-	// Return the absolute path to the DIRECTORY
-	absPath, err := filepath.Abs(funcDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
-	}
-	return absPath, nil
+	fmt.Printf("\n------>*:%v \n", respo)
+
+	functionUploadUrl := respo.UploadURL
+
+	// if _, err := io.Copy(dst, reader); err != nil {
+	// 	return "", fmt.Errorf("failed to save binary: %w", err)
+	// }
+
+	// // Return the absolute path to the DIRECTORY
+	// if err != nil {
+	// 	return "", fmt.Errorf("failed to get absolute path: %w", err)
+	// }
+	return functionUploadUrl, nil
+}
+func CalculateSHA256Bytes(data []byte) string {
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }
 
-func (s *Storage) SaveFunctionZip(name string, reader io.ReaderAt, size int64) (string, error) {
+func (s *Storage) SaveFunctionZip(ctx *gin.Context, name string, reader io.ReaderAt, size int64, functionID string, fileBytes []byte, filesha string) (string, error) {
 	// Create directory: ./storage/functions/<name>/
 	funcDir := filepath.Join(s.BaseDir, "functions", name)
 
@@ -69,7 +134,40 @@ func (s *Storage) SaveFunctionZip(name string, reader io.ReaderAt, size int64) (
 	if err != nil {
 		return "", fmt.Errorf("failed to create zip reader: %w", err)
 	}
+	userid := ctx.GetString("userID")
 
+	payload := createPresignedURLRequest{
+		UserID:     userid,
+		AssetID:    functionID,
+		AssetType:  AssetTypeLambda,
+		AssetName:  name,
+		BucketName: "lambdas",
+		Key:        name,
+		Sha256:     filesha,
+		GameID:     functionID,
+	}
+
+	uploadPresignUrl := fmt.Sprintf("%s.s3.task.create_presigned_url", s.natsPrefix)
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	resp, err := s.natsClient.Request(ctx, uploadPresignUrl, data, time.Duration(time.Second*5))
+
+	var respo createPresignedURLResponse
+	error := json.Unmarshal(resp, &respo)
+
+	if error != nil {
+		return "", fmt.Errorf("failed to Unmarshal payload: %w", err)
+	}
+
+	fmt.Printf("\n\n---6--->*:%v\n\n", payload.Sha256)
+
+	functionUploadUrl := respo.UploadURL
+
+	// s.natsClient.Request(ctx, uploadPresignUrl)
 	for _, f := range zipReader.File {
 		// Zip Slip Vulnerability Protection
 		fpath := filepath.Join(funcDir, f.Name)
@@ -91,26 +189,27 @@ func (s *Storage) SaveFunctionZip(name string, reader io.ReaderAt, size int64) (
 			return "", err
 		}
 
-		srcFile, err := f.Open()
-		if err != nil {
+		_, errw := f.Open()
+		if errw != nil {
 			dstFile.Close()
 			return "", err
 		}
 
-		_, err = io.Copy(dstFile, srcFile)
-		srcFile.Close()
-		dstFile.Close()
-		if err != nil {
-			return "", err
-		}
+		// _, err = io.Copy(dstFile, srcFile)
+		// srcFile.Close()
+		// dstFile.Close()
+		// if err != nil {
+		// 	return "", err
+		// }
 	}
 
 	// Return the absolute path to the DIRECTORY
-	absPath, err := filepath.Abs(funcDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
-	}
-	return absPath, nil
+	// absPath, err := filepath.Abs(funcDir)
+	// if err != nil {
+	// 	return "", fmt.Errorf("failed to get absolute path: %w", err)
+	// }
+	return functionUploadUrl, nil
+
 }
 
 func (s *Storage) ReadFunctionFile(name string, filename string) ([]byte, error) {

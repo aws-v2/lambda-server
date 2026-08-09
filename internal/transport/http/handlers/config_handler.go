@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
@@ -9,21 +10,21 @@ import (
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
 	"lambda/internal/infrastructure/storage"
-	"lambda/internal/utils/logger"
+	"lambda/internal/utils"
+
+	"log"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 type ConfigHandler struct {
-	DB *database.DB
-	Storage *storage.Storage
-	Resolver *auth.ApiKeyResolver
-	Region string
-	NatsClient *event.NatsClient
-	ResolveFunction func(identifier, userID string) (*database.Function, error)
+	DB                *database.DB
+	Storage           *storage.Storage
+	Resolver          *auth.ApiKeyResolver
+	Region            string
+	NatsClient        *event.NatsClient
+	ResolveFunction   func(identifier, userID string) (*database.Function, error)
 	ResolveIdentifier func(c *gin.Context) string
-	
 }
 
 func NewConfigHandler(db *database.DB, storage *storage.Storage, resolver *auth.ApiKeyResolver, region string, natsClient *event.NatsClient) *ConfigHandler {
@@ -31,144 +32,91 @@ func NewConfigHandler(db *database.DB, storage *storage.Storage, resolver *auth.
 }
 
 func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
-	log := logger.WithContext(c.Request.Context()).With(
-		zap.String(logger.F.Action, "lambda.update_config"),
-		zap.String(logger.F.Domain, "lambda"),
-	)
+
+	requestID := c.GetString("requestID")
 
 	identifier := h.ResolveIdentifier(c)
-	userID, _ := c.Get("user_id")
-	userIDStr, _ := userID.(string)
-
-	log = log.With(
-		zap.String("function_identifier", identifier),
-		zap.String("user_id", userIDStr),
-	)
+	userIDStr := c.GetString("userId")
 
 	var req dto.UpdateFunctionConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Warn("failed to bind config update request",
-			zap.String(logger.F.ErrorKind, "invalid_request"),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Printf("[Handler:CreateDatabase] Payload unmarshal, bad request for requestID %s, with error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusBadRequest, fmt.Errorf("Bad request"))
 		return
 	}
 
 	fn, err := h.ResolveFunction(identifier, userIDStr)
 	if err != nil {
-		log.Warn("function lookup failed",
-			zap.String(logger.F.ErrorKind, "not_found"),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusNotFound, fmt.Errorf("config is not found"))
 		return
 	}
 
 	err = h.DB.UpdateFunctionConfig(fn.Name, userIDStr, req.Memory, req.Timeout, req.Description)
 	if err != nil {
-		log.Error("failed to update function configuration",
-			zap.String(logger.F.ErrorKind, "db_write_error"),
-			zap.String("function_name", fn.Name),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update function configuration"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusNotFound, fmt.Errorf("config could not update successfully"))
 		return
 	}
 
-	log.Info("function configuration updated successfully", zap.String("function_name", fn.Name))
+	utils.RespondSucces(c, http.StatusCreated, "config updated succesfully", gin.H{"id": identifier, "status": "UPDATED"})
 
-	c.JSON(http.StatusOK, gin.H{"message": "configuration updated successfully"})
 }
 
 func (h *ConfigHandler) UpdateCode(c *gin.Context) {
-	log := logger.WithContext(c.Request.Context()).With(
-		zap.String(logger.F.Action, "lambda.update_code"),
-		zap.String(logger.F.Domain, "lambda"),
-	)
+
+	requestID := c.GetString("requestID")
 
 	identifier := h.ResolveIdentifier(c)
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userId")
 	userIDStr, _ := userID.(string)
-
-	log = log.With(
-		zap.String("function_identifier", identifier),
-		zap.String("user_id", userIDStr),
-	)
 
 	fn, err := h.ResolveFunction(identifier, userIDStr)
 	if err != nil {
-		log.Warn("function lookup failed",
-			zap.String(logger.F.ErrorKind, "not_found"),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusNotFound, fmt.Errorf("config is not found"))
 		return
 	}
 
 	content, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		log.Warn("failed to read request body",
-			zap.String(logger.F.ErrorKind, "read_error"),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusBadRequest, fmt.Errorf("Bad request"))
+
 		return
 	}
 
 	err = h.Storage.WriteFunctionFile(fn.Name, "handler", content)
 	if err != nil {
-		log.Error("failed to update code artifact",
-			zap.String(logger.F.ErrorKind, "storage_error"),
-			zap.String("function_name", fn.Name),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update code artifact"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusNotFound, fmt.Errorf("Failed to update code artifacts"))
 		return
 	}
 
-	log.Info("function code updated successfully", zap.String("function_name", fn.Name))
-
-	c.JSON(http.StatusOK, gin.H{"message": "code updated successfully"})
+	utils.RespondSucces(c, http.StatusCreated, "code updated successfully", gin.H{"id": identifier, "status": "UPDATED"})
 }
 
 func (h *ConfigHandler) GetCode(c *gin.Context) {
-	log := logger.WithContext(c.Request.Context()).With(
-		zap.String(logger.F.Action, "lambda.get_code"),
-		zap.String(logger.F.Domain, "lambda"),
-	)
 
 	identifier := h.ResolveIdentifier(c)
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
 
-	log = log.With(
-		zap.String("function_identifier", identifier),
-		zap.String("user_id", userIDStr),
-	)
+	requestID := c.GetString("requestID")
 
 	fn, err := h.ResolveFunction(identifier, userIDStr)
 	if err != nil {
-		log.Warn("function lookup failed",
-			zap.String(logger.F.ErrorKind, "not_found"),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusNotFound, gin.H{"error": "function not found or access denied"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusNotFound, fmt.Errorf("function not found"))
 		return
 	}
 
 	content, err := h.Storage.ReadFunctionFile(fn.Name, "handler")
 	if err != nil {
-		log.Error("failed to read code artifact",
-			zap.String(logger.F.ErrorKind, "storage_error"),
-			zap.String("function_name", fn.Name),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read code artifact"})
+		log.Printf("[Handler:CreateDatabase] Service call,  requestID %s, error %s", requestID, err.Error())
+		utils.RespondError(c, http.StatusNotFound, fmt.Errorf("Failed to read code artifacts"))
 		return
 	}
 
-	log.Info("function code retrieved successfully", zap.String("function_name", fn.Name))
-
-	c.Data(http.StatusOK, "text/plain", content)
+	utils.RespondSucces(c, http.StatusCreated, "function code updated successfully", content)
 }

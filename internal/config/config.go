@@ -49,6 +49,7 @@ type NATSConfig struct {
 	URL      string
 	User     string
 	Password string
+	Prefix string 
 }
 
 type ServerConfig struct {
@@ -80,6 +81,7 @@ func Load() (*Config, error) {
 			URL:      getEnv("NATS_URL", "nats://localhost:4222"),
 			User:     getEnv("NATS_USER", "auth-server"),
 			Password: getEnv("NATS_PASSWORD", "auth-secret"),
+			Prefix: getEnv("NATS_PREFIX", "dev.v1"),
 		},
 		Server: ServerConfig{
 			Port:        getEnv("PORT", "8089"),
@@ -204,7 +206,7 @@ type PropertySource struct {
 }
 
 // LoadConfig fetches configuration from Spring Cloud Config Server and sets them as environment variables
-func LoadConfig(url string) error {
+func LoadRemoteConfig(url string) error {
 	logger.Log.Info("Fetching configuration from external server", zap.String("url", url))
 
 	client := &http.Client{Timeout: 30 * time.Second}

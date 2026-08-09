@@ -99,7 +99,22 @@ jobs:
               -e PORT=8089 \
               qarani/lambda-server:staging-${{github.sha}}
 
-
+# APP_PROFILE=staging
+# DB_HOST=ep-purple-feather-aypga34j-pooler.c-5.us-east-2.aws.neon.tech
+# DB_PORT=5432
+# DB_USER=neondb_owner
+# DB_PASSWORD=npg_EHvDpaNKS73u
+# DB_NAME=lambda_db
+# NATS_URL=nats://nats-staging:4222
+# NATS_USER=nats-staging-user
+# NATS_PASSWORD=nats-staging-password
+# EUREKA_HOSTNAME=lambda-service-staging
+# EUREKA_IP_ADDR=127.0.0.1\
+# EUREKA_SERVER_URL=https://discovery-server-staging.onrender.com/eureka
+# SERVICE_NAME=lambda-service
+# AWS_REGION=eu-north-1
+# NATS_PREFIX=staging.v1
+# PORT=8089
   staging-open-pr-to-main:
     needs: staging-deploy
     if: github.event_name == 'push'

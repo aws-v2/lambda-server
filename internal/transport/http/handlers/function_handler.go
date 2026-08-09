@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -11,6 +14,7 @@ import (
 	"lambda/internal/utils/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -30,8 +34,8 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
-	uIDStr, _ := userID.(string)
+	userID := c.GetString("userID")
+	uIDStr := userID
 
 	log = log.With(
 		zap.String("function_name", req.Name),
@@ -39,13 +43,19 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 	)
 
 	var artifactPath string
-
+	var functionID string
+	var filePayload []byte
+	var filesha string 
 	if req.Execution.Kind == "image" {
 		log.Info("registering image-based function",
 			zap.String("image", req.Image),
 		)
 	} else {
 		file, err := c.FormFile("file")
+		multipartFile, err := file.Open()
+
+		payload, err := json.Marshal(multipartFile)
+		filePayload =payload
 		if err != nil {
 			log.Warn("missing file for non-image function",
 				zap.String(logger.F.ErrorKind, "invalid_request"),
@@ -64,14 +74,14 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 			return
 		}
 		defer openedFile.Close()
-
+		filesha =CalculateSHA256Bytes(filePayload)
 		ext := filepath.Ext(file.Filename)
 		isZip := ext == ".zip" ||
 			file.Header.Get("Content-Type") == "application/zip" ||
 			file.Header.Get("Content-Type") == "application/x-zip-compressed"
-
+		functionID = uuid.New().String()
 		if isZip {
-			artifactPath, err = h.Storage.SaveFunctionZip(req.Name, openedFile, file.Size)
+			artifactPath, err = h.Storage.SaveFunctionZip(c, req.Name, openedFile, file.Size, functionID, payload,filesha)
 			if err != nil {
 				log.Error("failed to save function zip",
 					zap.String(logger.F.ErrorKind, "storage_error"),
@@ -82,7 +92,7 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 			}
 			log.Info("function zip saved", zap.String("artifact_path", artifactPath))
 		} else {
-			artifactPath, err = h.Storage.SaveFunctionBinary(req.Name, openedFile)
+			artifactPath, err = h.Storage.SaveFunctionBinary(c, req.Name, openedFile, functionID, payload,filesha)
 			if err != nil {
 				log.Error("failed to save function binary",
 					zap.String(logger.F.ErrorKind, "storage_error"),
@@ -144,8 +154,9 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 	}
 
 	arn := h.GenerateArn(uIDStr, req.Name)
-
+	fmt.Printf("-*-*, %s", functionID)
 	err := h.DB.SaveFunction(database.Function{
+		ID:     functionID,
 		Name:   req.Name,
 		ARN:    arn,
 		UserID: uIDStr,
@@ -163,6 +174,7 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 		Env:         nil,
 		TimeoutMS:   req.TimeoutMS,
 		Description: req.Description,
+		Sha256:      filesha,
 	})
 	if err != nil {
 		log.Error("failed to save function metadata",
@@ -176,10 +188,15 @@ func (h *LambdaHandlers) RegisterFunction(c *gin.Context) {
 	log.Info("function registered successfully", zap.String("function_arn", arn))
 
 	c.JSON(http.StatusOK, gin.H{
+		"code":http.StatusOK,
 		"message":       "function registered successfully",
 		"name":          req.Name,
 		"artifact_path": artifactPath,
 	})
+}
+func CalculateSHA256Bytes(data []byte) string {
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }
 
 func (h *LambdaHandlers) ListFunctions(c *gin.Context) {
@@ -188,7 +205,7 @@ func (h *LambdaHandlers) ListFunctions(c *gin.Context) {
 		zap.String(logger.F.Domain, "lambda"),
 	)
 
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userID")
 	userIDStr, _ := userID.(string)
 
 	functions, err := h.DB.ListFunctionsByUser(userIDStr)
@@ -217,7 +234,7 @@ func (h *LambdaHandlers) GetFunction(c *gin.Context) {
 	)
 
 	identifier := h.ResolveIdentifier(c)
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userID")
 	userIDStr, _ := userID.(string)
 
 	log = log.With(
@@ -247,7 +264,7 @@ func (h *LambdaHandlers) GetCode(c *gin.Context) {
 	)
 
 	identifier := h.ResolveIdentifier(c)
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userID")
 	userIDStr, _ := userID.(string)
 
 	log = log.With(

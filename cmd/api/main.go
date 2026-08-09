@@ -48,7 +48,7 @@ func main() {
 
 	// ── 2. Reachability checks ────────────────────────────────────────────
 	if err := config.CheckReachability(cfg.NATS.URL, 5, 2*time.Second); err != nil {
-		logger.Log.Fatal("NATS unreachable",
+		logger.Log.Info("NATS unreachable",
 			zap.String(logger.F.ErrorKind, "nats_unreachable"),
 			zap.Error(err),
 		)
@@ -95,7 +95,7 @@ func main() {
 		nc, err = nats.Connect(cfg.NATS.URL)
 	}
 	if err != nil {
-		logger.Log.Fatal("NATS connect failed",
+		logger.Log.Info("NATS connect failed",
 			zap.String(logger.F.ErrorKind, "nats_connect"),
 			zap.String("url", cfg.NATS.URL),
 			zap.Error(err),
@@ -137,7 +137,7 @@ func main() {
 
 	// ── 7. Infrastructure ─────────────────────────────────────────────────
 	natsClient  := event.NewNatsClient(nc)
-	codeStorage := storage.NewStorage(getEnv("CODE_STORAGE_PATH", "./storage"))
+	codeStorage := storage.NewStorage(getEnv("CODE_STORAGE_PATH", "./storage"), cfg.NATS.Prefix,natsClient)
 	resolver    := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
 
 	// ── 8. Handlers ───────────────────────────────────────────────────────

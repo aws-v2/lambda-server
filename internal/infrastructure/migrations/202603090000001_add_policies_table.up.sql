@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS 'uuid-ossp';
 
 CREATE TABLE lambda_scaling_policies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -44,3 +44,9 @@ FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- +goose StatementEnd
+
+
+
+
+alter table functions add column id text;
+alter table functions add column sha256 text default;

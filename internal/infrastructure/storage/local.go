@@ -58,19 +58,17 @@ type createPresignedURLResponse struct {
 	UploadURL string `json:"upload_url"`
 }
 
-func (s *Storage) SaveFunctionBinary(ctx *gin.Context, name string, reader io.Reader, functionID string, fileBytes []byte, filesha string) (string, error) {
-	userid := ctx.GetString("userID")
- 
+func (s *Storage) SaveFunctionBinary(ctx *gin.Context, name string, reader io.Reader, functionID string, fileBytes []byte, filesha string,systemUserID string) (string, error) {
+	// userid := ctx.GetString("userID")
 
 	uploadPresignUrl := fmt.Sprintf("%s.s3.task.create_presigned_url", s.natsPrefix)
 
-	fmt.Printf("\n------>:files sha**:\n %s",filesha)
-
-
-
+	fmt.Printf("\n------>:files sha**:\n %s", filesha)
 
 	payload := createPresignedURLRequest{
-		UserID:     userid,
+		// UserID:     userid,
+		UserID:     systemUserID,
+
 		AssetID:    functionID,
 		AssetType:  AssetTypeLambda,
 		AssetName:  name,
@@ -116,7 +114,7 @@ func CalculateSHA256Bytes(data []byte) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (s *Storage) SaveFunctionZip(ctx *gin.Context, name string, reader io.ReaderAt, size int64, functionID string, fileBytes []byte, filesha string) (string, error) {
+func (s *Storage) SaveFunctionZip(ctx *gin.Context, name string, reader io.ReaderAt, size int64, functionID string, fileBytes []byte, filesha string, systemUserID string) (string, error) {
 	// Create directory: ./storage/functions/<name>/
 	funcDir := filepath.Join(s.BaseDir, "functions", name)
 
@@ -134,10 +132,17 @@ func (s *Storage) SaveFunctionZip(ctx *gin.Context, name string, reader io.Reade
 	if err != nil {
 		return "", fmt.Errorf("failed to create zip reader: %w", err)
 	}
-	userid := ctx.GetString("userID")
+	/*
+		why are we using the system user id instead of the actual userid,
+		its because when you upload a function zip its saved in a default lambdas bucket
+		owner by the system user,
+		ie. all functions from all users are stored in one zipctx
+		i dont know if this is a bug or not, its just how things are working for now*/
+	// userid := ctx.GetString("userID")
 
 	payload := createPresignedURLRequest{
-		UserID:     userid,
+		// UserID:     userid,
+		UserID:     systemUserID,
 		AssetID:    functionID,
 		AssetType:  AssetTypeLambda,
 		AssetName:  name,
@@ -195,19 +200,8 @@ func (s *Storage) SaveFunctionZip(ctx *gin.Context, name string, reader io.Reade
 			return "", err
 		}
 
-		// _, err = io.Copy(dstFile, srcFile)
-		// srcFile.Close()
-		// dstFile.Close()
-		// if err != nil {
-		// 	return "", err
-		// }
 	}
 
-	// Return the absolute path to the DIRECTORY
-	// absPath, err := filepath.Abs(funcDir)
-	// if err != nil {
-	// 	return "", fmt.Errorf("failed to get absolute path: %w", err)
-	// }
 	return functionUploadUrl, nil
 
 }

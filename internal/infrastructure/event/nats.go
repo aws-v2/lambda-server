@@ -15,11 +15,13 @@ import (
 type NatsClient struct {
 	Conn *nats.Conn
 	log  *zap.Logger
+	NatsPrefix string 
 }
 
-func NewNatsClient(nc *nats.Conn) *NatsClient {
+func NewNatsClient(nc *nats.Conn, natsPrefix string ) *NatsClient {
 	return &NatsClient{
 		Conn: nc,
+		NatsPrefix: natsPrefix,
 		log: logger.Log.With(
 			zap.String(logger.F.Domain, "nats"),
 		),

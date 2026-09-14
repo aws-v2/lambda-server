@@ -102,6 +102,11 @@ jobs:
               --env EUREKA_VIP_ADDRESS=lambda-server \
               --env EUREKA_INSTANCE_ID=lambda-server:8089 \
               --env EUREKA_HEARTBEAT_INTERVAL=30s \
+              --env RUNTIME_PORT=9033 \
+              --env RUNTIME_PROTOCOL=https \
+
+              --env INVOKE_API_KEY="ak_MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwOmEyOGEyMjY3OTY3MTQzYjVhOGVhNWQyNTI4NTg4YmU1OlNZU1RFTQ.YYd_UGhmiUuuCA2eQfF8gdXTSAErI38a4lSZkHG4Ux8" \
+
               qarani/lambda-server:prod
 
 

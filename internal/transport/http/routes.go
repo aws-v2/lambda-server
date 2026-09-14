@@ -12,8 +12,6 @@ func SetupRoutes(
 	handlers *handlers.LambdaHandlers, 
 	invokeHandlers *handlers.InvokeHandler, 
 	configHandlers *handlers.ConfigHandler, 
-	metricsHandlers *handlers.MetricHandler, 
-	policyHandlers *handlers.PolicyLambdaHandlers,
 
 	docsHandlers *handlers.DocsHandler,	 
 
@@ -29,16 +27,16 @@ func SetupRoutes(
 		v1.GET("/functions", handlers.ListFunctions)
 		v1.GET("/functions/:name", handlers.GetFunction)
 		v1.GET("/functions/:name/code", configHandlers.GetCode)
-		v1.PATCH("/functions/:name/code", configHandlers.UpdateCode)
-		v1.GET("/functions/:name/metrics", metricsHandlers.GetMetrics)
+		// v1.PATCH("/functions/:name/code", configHandlers.UpdateCode)
+		// v1.GET("/functions/:name/metrics", metricsHandlers.GetMetrics)
 		v1.PATCH("/functions/:name/config", configHandlers.UpdateConfig)
 		v1.POST("/functions/:name/invoke", invokeHandlers.Invoke)
 		v1.POST("/functions/:name/test", invokeHandlers.Invoke)
 
 		// ARN-based routing
-		v1.GET("/functions/arn/*arn", handlers.ArnRouter)
-		v1.POST("/functions/arn/*arn", handlers.ArnRouter)
-		v1.PATCH("/functions/arn/*arn", handlers.ArnRouter)
+		// v1.GET("/functions/arn/*arn", handlers.ArnRouter)
+		// v1.POST("/functions/arn/*arn", handlers.ArnRouter)
+		// v1.PATCH("/functions/arn/*arn", handlers.ArnRouter)
 	}
 
 	v1.GET("/health", func(c *gin.Context) {
@@ -46,12 +44,12 @@ func SetupRoutes(
 	})
 
 	// Scaling policies
-	scalingPolicies := v1.Group("")
+	// scalingPolicies := v1.Group("")
 	{
-		scalingPolicies.GET("/policies", policyHandlers.ListLambdaScalingPolicies)
-		scalingPolicies.POST("/:functionId/policies", policyHandlers.CreateLambdaScalingPolicy)
-		scalingPolicies.PUT("/:functionId/policies", policyHandlers.UpdateLambdaScalingPolicy)
-		scalingPolicies.DELETE("/:functionId/policies", policyHandlers.DeleteLambdaScalingPolicy)
+		// scalingPolicies.GET("/policies", policyHandlers.ListLambdaScalingPolicies)
+		// scalingPolicies.POST("/:functionId/policies", policyHandlers.CreateLambdaScalingPolicy)
+		// scalingPolicies.PUT("/:functionId/policies", policyHandlers.UpdateLambdaScalingPolicy)
+		// scalingPolicies.DELETE("/:functionId/policies", policyHandlers.DeleteLambdaScalingPolicy)
 	}
 
 	// Docs

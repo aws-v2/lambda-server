@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"lambda/internal/domain/models"
 	"lambda/internal/utils/logger"
 
 	"go.uber.org/zap"
@@ -19,86 +20,7 @@ import (
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
-
-type Config struct {
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	Database        string
-	SSLMode         string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
-	ConnMaxIdleTime time.Duration
-}
-
-func DefaultConfig() Config {
-	return Config{
-		MaxOpenConns:    25,
-		MaxIdleConns:    5,
-		ConnMaxLifetime: 5 * time.Minute,
-		ConnMaxIdleTime: 10 * time.Minute,
-		SSLMode:         "require",
-	}
-}
-
-type ExecutionDetails struct {
-	Kind    string   `json:"kind"`
-	Path    string   `json:"path"`
-	Command []string `json:"command"`
-}
-
-type ResourceDetails struct {
-	CPU    int `json:"cpu"`
-	Memory int `json:"memory"`
-}
-
-type Function struct {
-	ID string `json:"id"`
-	Name                   string
-	ARN                    string
-	UserID                 string
-	Type                   string
-	Image                  string
-	Execution              ExecutionDetails
-	Resources              ResourceDetails
-	Env                    map[string]string
-	TimeoutMS              int
-	Description            string
-	ProvisionedConcurrency int
-	Sha256 string
-}
-
-type LambdaMetric struct {
-	FunctionName string
-	UserID       string
-	DurationMS   int
-	Status       string // 'success', 'error'
-	ErrorMessage string
-	Timestamp    time.Time
-}
-
-type TimelinePoint struct {
-	Timestamp string  `json:"timestamp"`
-	Value     float64 `json:"value"`
-}
-
-type LambdaMetricsResponse struct {
-	Invocations int             `json:"invocations"`
-	Duration    float64         `json:"duration"` // Avg duration as float64
-	Errors      int             `json:"errors"`
-	Timeline    []TimelinePoint `json:"timeline"`
-}
-
-type ApiKey struct {
-	AccessKeyID   string    `json:"access_key_id"`
-	UserID        string    `json:"user_id"`
-	SecretKeyHash string    `json:"secret_key_hash"`
-	Enabled       bool      `json:"enabled"`
-	LastSynced    time.Time `json:"last_synced"`
-}
-
+ 
 type DB struct {
 	conn   *sql.DB
 	driver string
@@ -108,7 +30,7 @@ func (db *DB) Conn() *sql.DB {
 	return db.conn
 }
 
-func NewPostgresDB(cfg Config) (*sql.DB, error) {
+func NewPostgresDB(cfg models.Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
@@ -136,7 +58,7 @@ func NewPostgresDB(cfg Config) (*sql.DB, error) {
 	return db, nil
 }
 
-func Connect(cfg Config) (*DB, error) {
+func Connect(cfg models.Config) (*DB, error) {
 	logger.Log.Debug("Connecting to database...", zap.String("host", cfg.Host), zap.String("dbname", cfg.Database))
 
 	db, err := NewPostgresDB(cfg)
@@ -198,15 +120,15 @@ func (db *DB) RunMigrations(migrationsPath string) error {
 	return nil
 }
 
-func (db *DB) SaveFunction(f Function) error {
+func (db *DB) SaveFunction(f models.Function) error {
 	logger.Log.Debug("Saving function...", zap.String("name", f.Name))
 	execData, _ := json.Marshal(f.Execution)
 	resData, _ := json.Marshal(f.Resources)
 	envData, _ := json.Marshal(f.Env)
 
 	query := `
-	INSERT INTO functions (name,id,  arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	INSERT INTO functions (name,id,  arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256, region, runtime,handler, timeout, memory, version)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	ON CONFLICT (name) DO UPDATE SET
 	id=EXCLUDED.id,	
 	arn = EXCLUDED.arn,
@@ -219,9 +141,15 @@ func (db *DB) SaveFunction(f Function) error {
 		timeout_ms = EXCLUDED.timeout_ms,
 		description = EXCLUDED.description,
 		provisioned_concurrency = EXCLUDED.provisioned_concurrency,
-		sha256 =EXCLUDED.sha256;`
+		sha256 =EXCLUDED.sha256,
+		region =EXCLUDED.region,
+		runtime =EXCLUDED.runtime,
+		handler =EXCLUDED.handler,
+		timeout =EXCLUDED.timeout,
+		version=EXCLUDED.version,
+		memory =EXCLUDED.memory;`
 
-	_, err := db.conn.Exec(query, f.Name,f.ID, f.ARN, f.UserID, f.Type, f.Image, execData, resData, envData, f.TimeoutMS, f.Description, f.ProvisionedConcurrency, f.Sha256)
+	_, err := db.conn.Exec(query, f.Name,f.ID, f.ARN, f.UserID, f.Type, f.Image, execData, resData, envData, f.TimeoutMS, f.Description, f.ProvisionedConcurrency, f.Sha256, f.Region, f.Runtime,f.Handler, f.TimeoutMS, f.MemoryMb, f.Version)
 	if err != nil {
 		logger.Log.Error("Failed to save function", zap.String("name", f.Name), zap.Error(err))
 		return err
@@ -229,19 +157,19 @@ func (db *DB) SaveFunction(f Function) error {
 	return nil
 }
 
-func (db *DB) GetFunction(name string, userID string) (*Function, error) {
-	logger.Log.Debug("Fetching function...", zap.String("name", name), zap.String("userID", userID))
-	query := `SELECT id, name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency,sha256 FROM functions WHERE name = $1 AND user_id = $2`
-	var f Function
+func (db *DB) GetFunction(id string, userID string) (*models.Function, error) {
+	logger.Log.Debug("Fetching function...", zap.String("name", id), zap.String("userID", userID))
+	query := `SELECT id, name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency,sha256 FROM functions WHERE id = $1`
+	var f models.Function
 	var image, uID, desc, arn sql.NullString
 	var execData, resData, envData []byte
 
-	err := db.conn.QueryRow(query, name, userID).Scan(&f.ID,&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency, &f.Sha256)
+	err := db.conn.QueryRow(query, id).Scan(&f.ID,&f.Name, &arn, &uID, &f.Type, &image, &execData, &resData, &envData, &f.TimeoutMS, &desc, &f.ProvisionedConcurrency, &f.Sha256)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			logger.Log.Warn("Function not found", zap.String("name", name), zap.String("userID", userID))
+			logger.Log.Warn("Function not found", zap.String("name", id), zap.String("userID", userID))
 		} else {
-			logger.Log.Error("Failed to get function", zap.String("name", name), zap.Error(err))
+			logger.Log.Error("Failed to get function", zap.String("name", id), zap.Error(err))
 		}
 		return nil, err
 	}
@@ -257,10 +185,10 @@ func (db *DB) GetFunction(name string, userID string) (*Function, error) {
 	return &f, nil
 }
 
-func (db *DB) GetFunctionByARN(arn string, userID string) (*Function, error) {
+func (db *DB) GetFunctionByARN(arn string, userID string) (*models.Function, error) {
 	logger.Log.Debug("Fetching function by ARN...", zap.String("arn", arn), zap.String("userID", userID))
 	query := `SELECT id, name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256 FROM functions WHERE arn = $1 AND user_id = $2`
-	var f Function
+	var f models.Function
 	var image, uID, desc, savedArn sql.NullString
 	var execData, resData, envData []byte
 
@@ -300,7 +228,7 @@ func (db *DB) UpdateFunctionConfig(name string, userID string, memory int, timeo
 
 	resData, _ := json.Marshal(fn.Resources)
 
-	query := `UPDATE functions SET resources = $1, timeout_ms = $2, description = $3 WHERE name = $4 AND user_id = $5`
+	query := `UPDATE functions SET resources = $1, timeout_ms = $2, description = $3 WHERE id = $4 AND user_id = $5`
 	_, err = db.conn.Exec(query, resData, fn.TimeoutMS, fn.Description, name, userID)
 	return err
 }
@@ -313,7 +241,7 @@ func (db *DB) UpdateProvisionedConcurrency(name string, userID string, concurren
 	return err
 }
 
-func (db *DB) RecordMetric(m LambdaMetric) error {
+func (db *DB) RecordMetric(m models.LambdaMetric) error {
 	logger.Log.Debug("Recording lambda metric", zap.String("name", m.FunctionName), zap.String("status", m.Status))
 	query := `INSERT INTO lambda_metrics (function_name, user_id, duration_ms, status, error_message) VALUES ($1, $2, $3, $4, $5)`
 	_, err := db.conn.Exec(query, m.FunctionName, m.UserID, m.DurationMS, m.Status, m.ErrorMessage)
@@ -323,7 +251,7 @@ func (db *DB) RecordMetric(m LambdaMetric) error {
 	return err
 }
 
-func (db *DB) GetMetrics(name string, userID string) (*LambdaMetricsResponse, error) {
+func (db *DB) GetMetrics(name string, userID string) (*models.LambdaMetricsResponse, error) {
 	logger.Log.Debug("Fetching metrics", zap.String("name", name), zap.String("userID", userID))
 
 	// 1. Basic Stats (Last 24h)
@@ -335,7 +263,7 @@ func (db *DB) GetMetrics(name string, userID string) (*LambdaMetricsResponse, er
 		FROM lambda_metrics 
 		WHERE function_name = $1 AND user_id = $2 AND timestamp > NOW() - INTERVAL '24 hours'`
 
-	var resp LambdaMetricsResponse
+	var resp models.LambdaMetricsResponse
 	err := db.conn.QueryRow(statsQuery, name, userID).Scan(&resp.Invocations, &resp.Duration, &resp.Errors)
 	if err != nil {
 		logger.Log.Error("Failed to scan metrics stats", zap.Error(err))
@@ -359,7 +287,7 @@ func (db *DB) GetMetrics(name string, userID string) (*LambdaMetricsResponse, er
 	defer rows.Close()
 
 	for rows.Next() {
-		var p TimelinePoint
+		var p models.TimelinePoint
 		if err := rows.Scan(&p.Timestamp, &p.Value); err != nil {
 			continue
 		}
@@ -370,7 +298,7 @@ func (db *DB) GetMetrics(name string, userID string) (*LambdaMetricsResponse, er
 	return &resp, nil
 }
 
-func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
+func (db *DB) ListFunctionsByUser(userID string) ([]models.Function, error) {
 	logger.Log.Debug("Listing functions for user...", zap.String("userID", userID))
 	query := `SELECT id,name, arn, user_id, type, image, execution, resources, env, timeout_ms, description, provisioned_concurrency, sha256 FROM functions WHERE user_id = $1`
 
@@ -381,9 +309,9 @@ func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 	}
 	defer rows.Close()
 
-	var functions []Function
+	var functions []models.Function
 	for rows.Next() {
-		var f Function
+		var f models.Function
 		var image, uID, desc, arn sql.NullString
 		var execData, resData, envData []byte
 
@@ -404,10 +332,10 @@ func (db *DB) ListFunctionsByUser(userID string) ([]Function, error) {
 	return functions, nil
 }
 
-func (db *DB) GetApiKey(accessKeyID string) (*ApiKey, error) {
+func (db *DB) GetApiKey(accessKeyID string) (*models.ApiKey, error) {
 	logger.Log.Debug("Fetching API key from cache...", zap.String("accessKeyID", accessKeyID))
 	query := `SELECT access_key_id, user_id, secret_key_hash, enabled, last_synced FROM api_keys WHERE access_key_id = $1`
-	var k ApiKey
+	var k models.ApiKey
 	err := db.conn.QueryRow(query, accessKeyID).Scan(&k.AccessKeyID, &k.UserID, &k.SecretKeyHash, &k.Enabled, &k.LastSynced)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -419,7 +347,7 @@ func (db *DB) GetApiKey(accessKeyID string) (*ApiKey, error) {
 	return &k, nil
 }
 
-func (db *DB) SaveApiKey(k ApiKey) error {
+func (db *DB) SaveApiKey(k models.ApiKey) error {
 	logger.Log.Debug("Caching API key...", zap.String("accessKeyID", k.AccessKeyID))
 	query := `
 	INSERT INTO api_keys (access_key_id, user_id, secret_key_hash, enabled, last_synced)

@@ -7,14 +7,14 @@ import (
 
 	"lambda/internal/application"
 	"lambda/internal/config"
+	"lambda/internal/domain/models"
 	"lambda/internal/infrastructure/auth"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/discovery"
 	"lambda/internal/infrastructure/event"
-	"lambda/internal/infrastructure/repository"
 	"lambda/internal/infrastructure/storage"
-	transportHandlers "lambda/internal/transport/http/handlers"
 	transportHTTP "lambda/internal/transport/http"
+	transportHandlers "lambda/internal/transport/http/handlers"
 	transportMiddleware "lambda/internal/transport/http/middleware"
 	transportNATS "lambda/internal/transport/nats"
 	"lambda/internal/utils/logger"
@@ -22,7 +22,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -105,7 +104,7 @@ func main() {
 	logger.Log.Info("NATS connected", zap.String("url", cfg.NATS.URL))
 
 	// ── 6. PostgreSQL connection ──────────────────────────────────────────
-	db, err := database.Connect(database.Config{
+	db, err := database.Connect(models.Config{
 		Host:            cfg.DB.Host,
 		Port:            cfg.DB.Port,
 		User:            cfg.DB.User,
@@ -134,25 +133,27 @@ func main() {
 		)
 	}
 	logger.Log.Info("migrations completed")
-
 	// ── 7. Infrastructure ─────────────────────────────────────────────────
-	natsClient  := event.NewNatsClient(nc)
-	codeStorage := storage.NewStorage(getEnv("CODE_STORAGE_PATH", "./storage"), cfg.NATS.Prefix,natsClient)
-	resolver    := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
+	natsClient := event.NewNatsClient(nc, cfg.NatsPrefix)
+	codeStorage := storage.NewStorage(getEnv("CODE_STORAGE_PATH", "./storage"), cfg.NATS.Prefix, natsClient)
+	resolver := auth.NewApiKeyResolver(db, natsClient, cfg.Profile, "v1")
+
+	// repos
+	// service
+	docsService := application.NewDocsService(getEnv("DOCS_PATH", "./docs"))
+	funcService := application.NewLambdaService(db, natsClient, codeStorage, cfg.NatsPrefix, cfg.InvokeConfig.SystemUserId)
+	configService := application.NewConfigService(db, codeStorage, resolver, cfg.Server.Region, natsClient)
+	invokeService := application.NewInvokeService(db, natsClient, cfg.NatsPrefix,cfg.InvokeConfig, )
+
+	// handers
 
 	// ── 8. Handlers ───────────────────────────────────────────────────────
-	docsService    := application.NewDocsService(getEnv("DOCS_PATH", "./docs"))
-	docsHandler    := transportHandlers.NewDocsHandler(docsService)
+	docsHandler := transportHandlers.NewDocsHandler(docsService)
+	invokeHandler := transportHandlers.NewInvokeHandler(invokeService)
+	configHandler := transportHandlers.NewConfigHandler(configService)
 
-	invokeHandler  := transportHandlers.NewInvokeHandler(db, natsClient, cfg.NatsPrefix)
-	configHandler  := transportHandlers.NewConfigHandler(db, codeStorage, resolver,cfg.Server.Region, natsClient)
-	metricHandler  := transportHandlers.NewMetricHandler(db)
+	handlers := transportHandlers.NewLambdaHandlers(*funcService)
 
-	handlers       := transportHandlers.NewLambdaHandlers(db, natsClient, codeStorage, resolver, cfg.Server.Region, docsHandler, invokeHandler, metricHandler, configHandler)
-
-	policyRepo     := repository.NewLambdaScalingPolicyRepository(db.Conn())
-	policyService  := application.NewLambdaScalingPolicyService(policyRepo)
-	policyHandler  := transportHandlers.NewPolicyLambdaHandlers(policyService)
 
 	// ── 9. Router ─────────────────────────────────────────────────────────
 	router := gin.New()
@@ -160,11 +161,19 @@ func main() {
 		transportMiddleware.ZapMiddleware(cfg.Server.ServiceName),
 		gin.Recovery(),
 	)
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	transportHTTP.SetupRoutes(router, handlers, invokeHandler, configHandler, metricHandler, policyHandler,docsHandler,)
+
+
+	transportHTTP.SetupRoutes(router, handlers, invokeHandler, configHandler, docsHandler)
 
 	// ── 10. NATS listeners ────────────────────────────────────────────────
 	if err := transportNATS.StartScaleEventServer(natsClient, db); err != nil {
+		logger.Log.Error("scale event listener failed to start",
+			zap.String(logger.F.ErrorKind, "nats_listener"),
+			zap.Error(err),
+		)
+	}
+
+	if err := transportNATS.StartInvokeEventServer(natsClient, invokeService); err != nil {
 		logger.Log.Error("scale event listener failed to start",
 			zap.String(logger.F.ErrorKind, "nats_listener"),
 			zap.Error(err),

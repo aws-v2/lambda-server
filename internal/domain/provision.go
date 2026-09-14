@@ -5,10 +5,15 @@ import "encoding/json"
 type EC2Response struct {
 	GatewayIP   string `json:"gateway_ip"`
 	GatewayPort int    `json:"gateway_port"`
+	VMID string `json:"vm_id"`
+	Code int `json:"code"`
+
 }
 
 
 type ProvisionInstanceEvent struct {
+	ForwardingPort int 	`json:"forwarding_port"`
+
 	UserID     string          `json:"userID"`
 	Profile    string          `json:"profile" binding:"required"`
 	Name       string          `json:"name" binding:"required"`

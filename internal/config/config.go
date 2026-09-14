@@ -28,10 +28,18 @@ type Config struct {
 	Eureka EurekaConfig
 
 	// Profiles
-	Profile string
-	NatsPrefix string
+	Profile      string
+	NatsPrefix   string
+	InvokeConfig InvokeConfig
 }
-
+type InvokeConfig struct {
+	InvokeApiKey    string
+	RuntimePort     int
+	GatewayIP string
+	RuntimeProtocol string
+	SystemUserId string
+	
+}
 type DBConfig struct {
 	Host            string
 	Port            int
@@ -49,7 +57,7 @@ type NATSConfig struct {
 	URL      string
 	User     string
 	Password string
-	Prefix string 
+	Prefix   string
 }
 
 type ServerConfig struct {
@@ -60,16 +68,22 @@ type ServerConfig struct {
 }
 
 type EurekaConfig struct {
-	ServerURL string
-}
+	ServerURL string}
 
 func Load() (*Config, error) {
 	cfg := &Config{
+		InvokeConfig: InvokeConfig{
+			GatewayIP: "10.196.120.253",
+			RuntimePort:     getEnvInt("RUNTIME_PORT", 9033),
+			SystemUserId:"00000000-0000-0000-0000-000000000000",
+			RuntimeProtocol: getEnv("RUNTIME_PROTOCOL", "http"),
+			InvokeApiKey:    getEnv("INVOKE_API_KEY", "ak_MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwOmEyOGEyMjY3OTY3MTQzYjVhOGVhNWQyNTI4NTg4YmU1OlNZU1RFTQ.YYd_UGhmiUuuCA2eQfF8gdXTSAErI38a4lSZkHG4Ux8"),
+		},
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "postgres-prod-user"),
-			Password:        getEnv("DB_PASSWORD", "postgres-prod-password"),
+			User:            getEnv("DB_USER", "root"),
+			Password:        getEnv("DB_PASSWORD", "root"),
 			Database:        getEnv("DB_NAME", "lambda_db"),
 			SSLMode:         getEnv("DB_SSLMODE", "disable"),
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
@@ -81,7 +95,7 @@ func Load() (*Config, error) {
 			URL:      getEnv("NATS_URL", "nats://localhost:4222"),
 			User:     getEnv("NATS_USER", "auth-server"),
 			Password: getEnv("NATS_PASSWORD", "auth-secret"),
-			Prefix: getEnv("NATS_PREFIX", "dev.v1"),
+			Prefix:   getEnv("NATS_PREFIX", "dev.v1"),
 		},
 		Server: ServerConfig{
 			Port:        getEnv("PORT", "8089"),
@@ -92,7 +106,7 @@ func Load() (*Config, error) {
 		Eureka: EurekaConfig{
 			ServerURL: getEnv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"),
 		},
-		Profile: getEnv("APP_PROFILE", "dev.v1"),
+		Profile:    getEnv("APP_PROFILE", "dev.v1"),
 		NatsPrefix: getEnv("NATS_PREFIX", "dev.v1"),
 	}
 
@@ -158,7 +172,6 @@ func extractAddress(target string) string {
 	}
 	return target
 }
-
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {

@@ -48,5 +48,12 @@ EXECUTE FUNCTION update_updated_at_column();
 
 
 
-alter table functions add column id text;
-alter table functions add column sha256 text default;
+alter table functions add column if not exists id text;
+alter table functions add column if not exists sha256 text default;
+
+alter table functions add column if not exists runtime text not NULL;
+alter table functions add column if not exists region text default '';
+alter table functions add column if not exists handler text not NULL;
+alter table functions add column if not exists memory integer  not NULL;
+alter table functions add column if not exists timeout integer  not NULL;
+alter table functions add column if not exists version text  not NULL;

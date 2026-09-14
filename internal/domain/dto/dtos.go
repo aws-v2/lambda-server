@@ -13,29 +13,6 @@ type ResourceDetails struct {
 	Memory int `json:"memory" form:"resources.memory"`
 }
 
-// Requests
-
-type InvokeRequest struct {
-	Name    string                 `json:"name" binding:"required"`
-	Payload map[string]interface{} `json:"payload"`
-}
-
-type RegisterFunctionRequest struct {
-	Name        string            `form:"name" binding:"required"`
-	Type        string            `form:"type"`
-	Image       string            `form:"image"`
-	Execution   ExecutionDetails  `form:"execution"`
-	Resources   ResourceDetails   `form:"resources"`
-	Env         map[string]string `form:"env"`
-	TimeoutMS   int               `form:"timeout_ms"`
-	Description string            `form:"description"`
-}
-
-type UpdateFunctionConfigRequest struct {
-	Memory      int    `json:"memory" binding:"required"`
-	Timeout     int    `json:"timeout" binding:"required"`
-	Description string `json:"description"`
-}
 
 // NATS Message
 

@@ -29,14 +29,14 @@ func AuthMiddleware() gin.HandlerFunc {
 		authMethod := c.GetHeader("X-Auth-Method")
 		requestID := c.GetHeader("X-Request-Id")
 
-		fmt.Printf("userID=%v", c.Request.URL)
+		fmt.Printf("userID=%v", userID)
 		// TODO: this solution works but its inelegant, change this to somehtign better
 		headers := [4]string{userID, role, authMethod, requestID}
 
 		c.Set("userId", userID)
 		c.Set("role", role)
 		c.Set("authMethod", authMethod)
-		c.Set("requestID", requestID)
+		c.Set("requestId", requestID)
 		// the idea behind authMethod !="None" is about public endpoints,
 		// ie the public manifest & docs,
 		//  the authMethod is set to "None" in the api gateway for all public endpoints,

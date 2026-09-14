@@ -1,16 +1,21 @@
 package dto
 
-type LambdaScalingPolicyRequest struct {
-	TenantID            string  `json:"tenant_id"`
-	FunctionID          string  `json:"function_id"`
-	MetricName          string  `json:"metric_name"`
-	ScaleUpThreshold    float64 `json:"scale_up_threshold"`
-	ScaleDownThreshold  float64 `json:"scale_down_threshold"`
-	MaxConcurrencyLimit int     `json:"max_concurrency_limit"`
-	MinConcurrencyLimit int     `json:"min_concurrency_limit"`
-	ScaleStep           int     `json:"scale_step"`
-	CooldownSeconds     int     `json:"cooldown_seconds"`
+
+type PolicyEvent struct {
+	RequestID    string      `json:"request_id"`
+	PolicyID     string      `json:"policy_id,omitempty"`
+	AccountID    string      `json:"account_id,omitempty"`
+	PrincipalID  string      `json:"principal_id,omitempty"`
+	ResourceType string      `json:"resource_type,omitempty"`
+	ResourceID   string      `json:"resource_id,omitempty"`
+	Action       string      `json:"action,omitempty"`
+	Status       string      `json:"status,omitempty"`
+	Message      string      `json:"message,omitempty"`
+	Policy       interface{} `json:"policy,omitempty"`
+	Error        string      `json:"error,omitempty"`
 }
+
+
 
 type LambdaScalingPolicyEvent struct {
 	RequestID string                     `json:"request_id"`
@@ -30,4 +35,12 @@ type LambdaScaleEvent struct {
 	Metric     string  `json:"metric"`
 	Value      float64 `json:"value"`
 	Action     string  `json:"action"` // INCREASE_PROVISIONED_CONCURRENCY or DECREASE_PROVISIONED_CONCURRENCY
+}
+
+
+
+type BodyResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data"`
 }

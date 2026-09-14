@@ -97,6 +97,10 @@ jobs:
               -e AWS_REGION=eu-north-1 \
               -e NATS_PREFIX=staging.v1 \
               -e PORT=8089 \
+              -e RUNTIME_PORT=9033 \
+              -e RUNTIME_PROTOCOL=http \
+
+              -e INVOKE_API_KEY="ak_MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwOmEyOGEyMjY3OTY3MTQzYjVhOGVhNWQyNTI4NTg4YmU1OlNZU1RFTQ.YYd_UGhmiUuuCA2eQfF8gdXTSAErI38a4lSZkHG4Ux8" \
               qarani/lambda-server:staging-${{github.sha}}
 
 # APP_PROFILE=staging

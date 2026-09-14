@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"lambda/internal/domain/models"
 	"lambda/internal/infrastructure/database"
 	"lambda/internal/infrastructure/event"
 	"lambda/internal/utils/logger"
@@ -40,7 +41,7 @@ type resolveResponse struct {
 	Enabled       bool   `json:"enabled"`
 }
 
-func (r *ApiKeyResolver) Resolve(ctx context.Context, accessKeyID string) (*database.ApiKey, error) {
+func (r *ApiKeyResolver) Resolve(ctx context.Context, accessKeyID string) (*models.ApiKey, error) {
 	log := logger.WithContext(ctx)
 
 	// 1. Try local cache
@@ -114,7 +115,7 @@ func (r *ApiKeyResolver) Resolve(ctx context.Context, accessKeyID string) (*data
 	}
 
 	// 3. Save to local cache
-	newKey := database.ApiKey{
+	newKey := models.ApiKey{
 		AccessKeyID:   accessKeyID,
 		UserID:        resp.UserID,
 		SecretKeyHash: resp.SecretKeyHash,

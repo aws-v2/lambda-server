@@ -73,7 +73,7 @@ type EurekaConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		InvokeConfig: InvokeConfig{
-			GatewayIP: "10.196.120.253",
+			GatewayIP: "10.250.37.253",
 			RuntimePort:     getEnvInt("RUNTIME_PORT", 9033),
 			SystemUserId:"00000000-0000-0000-0000-000000000000",
 			RuntimeProtocol: getEnv("RUNTIME_PROTOCOL", "http"),

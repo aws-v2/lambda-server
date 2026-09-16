@@ -129,7 +129,7 @@ func (h *InvokeService) Invoke(c *context.Context, req dto.InvokeFunctionRequest
 		eventsMap := make(map[string]any)
 		eventsMap["divisor"] = 5
 		eventsMap["players"] = [3]string{"martin", "agnes", "gloria"}
-		functionUrlZip :=fmt.Sprintf("%s://%s:8080%s", h.InvokeCfg.RuntimeProtocol, h.InvokeCfg.GatewayIP, respo.URL)
+		functionUrlZip := fmt.Sprintf("%s://%s:8080%s", h.InvokeCfg.RuntimeProtocol, h.InvokeCfg.GatewayIP, respo.URL)
 
 		fmt.Printf("\n\n:--: %v", functionUrlZip)
 
@@ -143,7 +143,7 @@ func (h *InvokeService) Invoke(c *context.Context, req dto.InvokeFunctionRequest
 				PythonVersion: "3",
 				FunctionId:    fn.ID,
 				MemoryLimit:   fn.MemoryMb,
-				S3Url: functionUrlZip,
+				S3Url:         functionUrlZip,
 				ApiKey:        h.InvokeCfg.InvokeApiKey,
 			},
 			Events: req.EventsPayload.(map[string]any),
@@ -183,16 +183,17 @@ func (h *InvokeService) Invoke(c *context.Context, req dto.InvokeFunctionRequest
 
 		if errr != nil {
 			fmt.Errorf("Failed to send the .provision request to ec2")
-			return 
+			return
 		}
 
-		if ec2Response.GatewayIP=="" || ec2Response.Code==400 {
+		if ec2Response.GatewayIP == "" || ec2Response.Code == 400 {
 			fmt.Println("Gateway ip is blank , ie all lambda vms are in use ")
 			fmt.Errorf("Gateway ip is blank , ie all lambda vms are in use ")
-			return 
+			return
 
-			
 		}
+
+		fmt.Printf("\nEc2 response %+v\n", ec2Response)
 
 		// ec2Response.GatewayIP = "10.0.5.169"
 		ec2Response.GatewayPort = 9033
@@ -223,8 +224,7 @@ func (h *InvokeService) Invoke(c *context.Context, req dto.InvokeFunctionRequest
 			return
 		}
 		defer resp.Body.Close()
-			fmt.Printf("invoke http request called")
-
+		fmt.Printf("invoke http request called")
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {

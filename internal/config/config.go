@@ -17,6 +17,7 @@ import (
 type Config struct {
 	// Database
 	DB DBConfig
+METRICS_API_KEY  string
 
 	// NATS
 	NATS NATSConfig
@@ -35,10 +36,9 @@ type Config struct {
 type InvokeConfig struct {
 	InvokeApiKey    string
 	RuntimePort     int
-	GatewayIP string
+	GatewayIP       string
 	RuntimeProtocol string
-	SystemUserId string
-	
+	SystemUserId    string
 }
 type DBConfig struct {
 	Host            string
@@ -68,14 +68,37 @@ type ServerConfig struct {
 }
 
 type EurekaConfig struct {
-	ServerURL string}
+	ServerURL string
+}
+
+func GetOutboundIP() (net.IP, error) {
+	// 8.8.8.8:80 is just used as a routing target — no actual packet is sent for UDP Dial,
+	// the OS just resolves which local interface/route would be used.
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine outbound route: %w", err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP, nil
+}
 
 func Load() (*Config, error) {
+	ip, err := GetOutboundIP()
+	
+	if err != nil {
+		fmt.Printf("Could not get the ip address for the control plane ")
+		return nil, err
+	}
+
 	cfg := &Config{
+		METRICS_API_KEY:"e956807e27669001319d73d3a9f1728a4a1161c79a6a287160c3a73394c05df8",
+
 		InvokeConfig: InvokeConfig{
-			GatewayIP: "10.250.37.253",
+			GatewayIP:        fmt.Sprintf("%s",ip.String()),
 			RuntimePort:     getEnvInt("RUNTIME_PORT", 9033),
-			SystemUserId:"00000000-0000-0000-0000-000000000000",
+			SystemUserId:    "00000000-0000-0000-0000-000000000000",
 			RuntimeProtocol: getEnv("RUNTIME_PROTOCOL", "http"),
 			InvokeApiKey:    getEnv("INVOKE_API_KEY", "ak_MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwOmEyOGEyMjY3OTY3MTQzYjVhOGVhNWQyNTI4NTg4YmU1OlNZU1RFTQ.YYd_UGhmiUuuCA2eQfF8gdXTSAErI38a4lSZkHG4Ux8"),
 		},

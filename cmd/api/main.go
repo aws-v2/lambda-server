@@ -13,6 +13,7 @@ import (
 	"lambda/internal/infrastructure/discovery"
 	"lambda/internal/infrastructure/event"
 	"lambda/internal/infrastructure/storage"
+	"lambda/internal/metrics"
 	transportHTTP "lambda/internal/transport/http"
 	transportHandlers "lambda/internal/transport/http/handlers"
 	transportMiddleware "lambda/internal/transport/http/middleware"
@@ -143,7 +144,7 @@ func main() {
 	docsService := application.NewDocsService(getEnv("DOCS_PATH", "./docs"))
 	funcService := application.NewLambdaService(db, natsClient, codeStorage, cfg.NatsPrefix, cfg.InvokeConfig.SystemUserId)
 	configService := application.NewConfigService(db, codeStorage, resolver, cfg.Server.Region, natsClient)
-	invokeService := application.NewInvokeService(db, natsClient, cfg.NatsPrefix,cfg.InvokeConfig, )
+	invokeService := application.NewInvokeService(db, natsClient, cfg.NatsPrefix, cfg.InvokeConfig)
 
 	// handers
 
@@ -154,14 +155,18 @@ func main() {
 
 	handlers := transportHandlers.NewLambdaHandlers(*funcService)
 
-
 	// ── 9. Router ─────────────────────────────────────────────────────────
+	metrics.Serve(":7084", cfg.METRICS_API_KEY)
+
 	router := gin.New()
+	router.Use(metrics.MetricsMiddleware()) // first, before auth and before SetupRoutes
+
 	router.Use(
 		transportMiddleware.ZapMiddleware(cfg.Server.ServiceName),
 		gin.Recovery(),
 	)
 
+	// router.GET("/metrics", gin.WrapH(metrics.Handler())) // NEW: registered before SetupRoutes, no auth
 
 	transportHTTP.SetupRoutes(router, handlers, invokeHandler, configHandler, docsHandler)
 

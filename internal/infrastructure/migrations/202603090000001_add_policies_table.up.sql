@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
-CREATE EXTENSION IF NOT EXISTS 'uuid-ossp';
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE lambda_scaling_policies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

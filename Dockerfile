@@ -1,6 +1,6 @@
 # Step 1: Build the application
 FROM golang:1.24-alpine AS builder
-
+ENV GOTOOLCHAIN=auto
 WORKDIR /app
 
 # Install git for private dependencies if needed
@@ -41,6 +41,13 @@ RUN mkdir -p storage && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
+
+# Cache modules and build artifacts across builds
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main ./cmd/api/main.go
 
 # Expose the application port
 EXPOSE 8089

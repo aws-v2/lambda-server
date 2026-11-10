@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+
 # Step 1: Build the application
 FROM golang:1.24-alpine AS builder
 ENV GOTOOLCHAIN=auto
@@ -8,13 +10,18 @@ RUN apk add --no-cache git
 
 # Copy go mod and sum files
 COPY go.mod go.sum ./
-RUN go mod download
+
+# Cache modules across builds
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy the source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/api/main.go
+# Build the binary (cache modules and build artifacts)
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main ./cmd/api/main.go
 
 # Step 2: Final minimal image
 FROM alpine:latest
@@ -27,6 +34,7 @@ WORKDIR /app
 # Install certificates
 RUN apk --no-cache add ca-certificates
 RUN mkdir -p /app/docs
+
 # Copy the binary from the builder stage
 COPY --from=builder /app/main .
 
@@ -41,13 +49,6 @@ RUN mkdir -p storage && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
-
-# Cache modules and build artifacts across builds
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
-
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main ./cmd/api/main.go
 
 # Expose the application port
 EXPOSE 8089

@@ -1,1 +1,1 @@
-ALTER TABLE functions ADD COLUMN description TEXT;
+ALTER TABLE functions ADD COLUMN NOT EXISTS description TEXT;

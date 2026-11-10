@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS functions;
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- for gen_random_uuid()
 
-CREATE TABLE functions (
+CREATE TABLE NOT EXISTS functions (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                     TEXT NOT NULL UNIQUE,
     arn                      TEXT UNIQUE,

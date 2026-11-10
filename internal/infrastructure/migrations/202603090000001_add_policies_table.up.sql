@@ -2,7 +2,7 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE lambda_scaling_policies (
+CREATE TABLE IF NOT EXISTS lambda_scaling_policies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
     tenant_id TEXT NOT NULL,
@@ -24,9 +24,9 @@ CREATE TABLE lambda_scaling_policies (
     CONSTRAINT unique_policy UNIQUE (tenant_id, function_id, metric_name)
 );
 
-CREATE INDEX idx_lsp_tenant   ON lambda_scaling_policies (tenant_id);
-CREATE INDEX idx_lsp_function ON lambda_scaling_policies (function_id);
-CREATE INDEX idx_lsp_metric   ON lambda_scaling_policies (metric_name);
+CREATE INDEX IF NOT EXISTS idx_lsp_tenant   ON lambda_scaling_policies (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_lsp_function ON lambda_scaling_policies (function_id);
+CREATE INDEX IF NOT EXISTS idx_lsp_metric   ON lambda_scaling_policies (metric_name);
 
 -- auto-update updated_at
 -- +goose StatementBegin
@@ -39,6 +39,8 @@ END;
 $$ LANGUAGE plpgsql;
 -- +goose StatementEnd
 
+-- CREATE TRIGGER has no IF NOT EXISTS, so drop first
+DROP TRIGGER IF EXISTS set_updated_at ON lambda_scaling_policies;
 CREATE TRIGGER set_updated_at
 BEFORE UPDATE ON lambda_scaling_policies
 FOR EACH ROW
@@ -53,7 +55,10 @@ ALTER TABLE functions
     ADD COLUMN IF NOT EXISTS handler TEXT    NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS memory  INTEGER NOT NULL DEFAULT 128,
     ADD COLUMN IF NOT EXISTS timeout INTEGER NOT NULL DEFAULT 30,
-    ADD COLUMN IF NOT EXISTS version TEXT    NOT NULL DEFAULT '1';
+    ADD COLUMN IF NOT EXISTS version TEXT    NOT NULL DEFAULT '1',
+    ADD COLUMN IF NOT EXISTS user_id UUID;
+
+CREATE INDEX IF NOT EXISTS idx_functions_user_id ON functions (user_id);
 
 -- +goose Down
 DROP TRIGGER IF EXISTS set_updated_at ON lambda_scaling_policies;

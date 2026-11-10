@@ -1,1 +1,1 @@
-ALTER TABLE functions ADD COLUMN provisioned_concurrency INT DEFAULT 0;
+ALTER TABLE functions ADD COLUMN NOT EXISTS provisioned_concurrency INT DEFAULT 0;

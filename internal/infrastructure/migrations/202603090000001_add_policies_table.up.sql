@@ -1,5 +1,4 @@
 -- +goose Up
--- +goose StatementBegin
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -25,11 +24,12 @@ CREATE TABLE lambda_scaling_policies (
     CONSTRAINT unique_policy UNIQUE (tenant_id, function_id, metric_name)
 );
 
-CREATE INDEX idx_lsp_tenant ON lambda_scaling_policies (tenant_id);
+CREATE INDEX idx_lsp_tenant   ON lambda_scaling_policies (tenant_id);
 CREATE INDEX idx_lsp_function ON lambda_scaling_policies (function_id);
-CREATE INDEX idx_lsp_metric ON lambda_scaling_policies (metric_name);
+CREATE INDEX idx_lsp_metric   ON lambda_scaling_policies (metric_name);
 
 -- auto-update updated_at
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -37,23 +37,27 @@ BEGIN
    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER set_updated_at
 BEFORE UPDATE ON lambda_scaling_policies
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
--- +goose StatementEnd
+-- extend existing functions table
+ALTER TABLE functions
+    ADD COLUMN IF NOT EXISTS id      TEXT,
+    ADD COLUMN IF NOT EXISTS sha256  TEXT    DEFAULT '',
+    ADD COLUMN IF NOT EXISTS runtime TEXT    NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS region  TEXT    DEFAULT '',
+    ADD COLUMN IF NOT EXISTS handler TEXT    NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS memory  INTEGER NOT NULL DEFAULT 128,
+    ADD COLUMN IF NOT EXISTS timeout INTEGER NOT NULL DEFAULT 30,
+    ADD COLUMN IF NOT EXISTS version TEXT    NOT NULL DEFAULT '1';
 
-
-
-
-alter table functions add column if not exists id text;
-alter table functions add column if not exists sha256 text default;
-
-alter table functions add column if not exists runtime text not NULL;
-alter table functions add column if not exists region text default '';
-alter table functions add column if not exists handler text not NULL;
-alter table functions add column if not exists memory integer  not NULL;
-alter table functions add column if not exists timeout integer  not NULL;
-alter table functions add column if not exists version text  not NULL;
+-- +goose Down
+DROP TRIGGER IF EXISTS set_updated_at ON lambda_scaling_policies;
+DROP TABLE IF EXISTS lambda_scaling_policies;
+-- update_updated_at_column() is left in place because other tables may use it.
+-- The columns added to "functions" are not dropped here, since some may
+-- have existed before this migration.

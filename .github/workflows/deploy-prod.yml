@@ -102,6 +102,7 @@ jobs:
               --env EUREKA_VIP_ADDRESS=lambda-server \
               --env EUREKA_INSTANCE_ID=lambda-server:8089 \
               --env EUREKA_HEARTBEAT_INTERVAL=30s \
+              --env CONTROL_PLANE_IP=update_tthis \
               --env RUNTIME_PORT=9033 \
               --env RUNTIME_PROTOCOL=https \
               --env METRICS_API_KEY=e956807e27669001319d73d3a9f1728a4a1161c79a6a287160c3a73394c05df8 \

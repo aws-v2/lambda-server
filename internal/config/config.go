@@ -96,7 +96,7 @@ func Load() (*Config, error) {
 		METRICS_API_KEY:"e956807e27669001319d73d3a9f1728a4a1161c79a6a287160c3a73394c05df8",
 
 		InvokeConfig: InvokeConfig{
-			GatewayIP:        fmt.Sprintf("%s",ip.String()),
+			GatewayIP:        getEnv("CONTROL_PLANE_IP",fmt.Sprintf("%s",ip.String())),
 			RuntimePort:     getEnvInt("RUNTIME_PORT", 9033),
 			SystemUserId:    "00000000-0000-0000-0000-000000000000",
 			RuntimeProtocol: getEnv("RUNTIME_PROTOCOL", "http"),
